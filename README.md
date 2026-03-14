@@ -1,378 +1,400 @@
-# Seismic Fingerprints
+# The Memory of the Earth
 
-### Detecting the Statistical Signatures of Human-Caused Earthquakes in 25 Years of USGS Data
+### Quantifying Temporal Structure and Stress Dynamics in 25 Years of Global Seismicity
 
 **Concept & Analytical Design:** Claude (Opus 4.6, Anthropic)
 **Implementation:** Claude Code
 **Data:** USGS ANSS Comprehensive Earthquake Catalog (ComCat), 2000–2025
+**License:** MIT
 
 ---
 
 ## Abstract
 
-Between 2009 and 2015, Oklahoma went from averaging one M3+ earthquake per year to 888 — briefly surpassing California as the most seismically active state in the contiguous United States. The cause was wastewater injection from oil and gas production. Regulatory intervention (well plug-backs, volume reductions) brought rates back down, creating one of the cleanest natural experiments in geophysics: a human-controlled perturbation to a tectonic system, with a measurable dose-response curve and a partial reversal.
+When a fault ruptures, the resulting stress redistribution alters the probability of future earthquakes nearby — sometimes for minutes, sometimes for decades. This "memory" is encoded in the statistical fingerprint of seismicity: the relative frequency of large versus small earthquakes (the Gutenberg-Richter b-value), the waiting times between successive events (inter-event time distributions), and the rate at which aftershock sequences decay.
 
-This project treats that event not as a case study, but as a **Rosetta Stone**. If induced seismicity leaves detectable statistical fingerprints in the earthquake catalog — fingerprints that differ from tectonic seismicity — then we can build classifiers that detect anthropogenic influence in *other* regions before the signal becomes as obvious as Oklahoma's was. The project applies information theory, survival analysis, network science, and changepoint detection to 25 years of USGS earthquake data to answer three questions:
+This project applies information theory, survival analysis, and time-series methods to 25 years of the USGS global earthquake catalog (~600,000 M2.5+ events) to map and measure these memory signatures across the globe. We organize the work around five questions:
 
-1. **Can we distinguish human-caused earthquake sequences from tectonic ones using only catalog statistics — no injection well data, no geology, just the earthquakes themselves?**
-2. **Is the Permian Basin (west Texas / southeast New Mexico) showing the same early statistical fingerprints that Oklahoma showed before its seismicity exploded?**
-3. **What do aftershock cascade structures reveal about the mechanical differences between induced and tectonic fault activation?**
+1. **Where is the Earth's stress regime stable, and where is it volatile?** We map not just the b-value, but its temporal coefficient of variation — a quantity that captures how much the rules are changing in a given region.
+
+2. **How long does it take for seismicity statistics to recover after a major earthquake?** We systematically measure recovery timescales across every M7+ event in the catalog using a consistent methodology, enabling cross-comparison on a uniform basis.
+
+3. **What is the dominant temporal regime of each seismically active region?** Using maximum-likelihood fitting of competing statistical distributions, we classify regions as memoryless, clustered, quasi-periodic, or complex.
+
+4. **What does the full statistical lifecycle of an induced seismicity episode look like?** We track multiple statistical signatures simultaneously across Oklahoma's 15-year arc from quiescence through explosion through partial recovery.
+
+5. **Does the Shannon entropy of magnitude distributions carry any information about the approach of large events?** We construct a global entropy time series and test it against a null model.
+
+Each analysis stands on its own. Together, they produce a composite picture of how seismic memory operates across spatial scales, tectonic settings, and timescales.
 
 ---
 
-## Why This Matters
+## Motivation
 
-Since 2020, the Permian Basin has experienced six M5+ earthquakes. Seismicity there is rising along a trajectory that mirrors Oklahoma's circa 2011–2013. If statistical fingerprints of induced seismicity are detectable in catalog data alone — without requiring proprietary injection well records — that creates a scalable early-warning methodology applicable globally, anywhere hydrocarbon extraction or geothermal energy production intersects with basement faults.
+The Gutenberg-Richter law and Omori aftershock decay are among the most robust empirical laws in geophysics. Both have been studied extensively. What motivates this project is not the individual techniques — all are well-established — but three gaps in how they've been applied:
 
-This is not earthquake prediction. This is **earthquake attribution** — determining whether a regional seismicity increase is anthropogenic or tectonic, using only publicly available data.
+**Temporal volatility of the b-value may be underexplored.** Prior work typically maps b at a point in time or averaged over a catalog. We are not aware of systematic efforts to map the temporal coefficient of variation of b across a full 25-year global catalog, though we cannot rule out that such work exists. If it hasn't been done, CV_b captures a fundamentally different quantity from the b-value itself: not the stress state, but how stable or unstable the catalog-derived estimate is over time.
+
+**Stress recovery timescales have been measured for individual sequences but, to our knowledge, not cross-compared using a uniform methodology.** Studies of the 2011 Tohoku earthquake (Tormann et al. 2015) or the 2004 Sumatra earthquake measure recovery dynamics in isolation. We propose applying a consistent recovery-measurement framework across all M7+ events in the catalog, enabling direct comparison of recovery timescales by magnitude, tectonic setting, and depth. Whether this produces meaningful cross-comparisons is an empirical question.
+
+**Inter-event time regime classification has been done regionally but we are not aware of a uniform global classification.** Distribution fitting has been applied to California (Corral 2004), Japan (Hasumi et al. 2009), and Italy (Touati et al. 2009), among others. We test whether a consistent model-comparison framework (AIC across four candidate distributions) applied uniformly to every seismically active 2° × 2° cell on the globe reveals interpretable spatial patterns.
+
+We note that each of these claims about novelty reflects our understanding of the literature as of mid-2025 and may not capture all prior work. The value of the project does not depend on strict priority — even if individual analyses have precedents, the integration of all five into a single framework applied to a common catalog is, to our knowledge, new.
 
 ---
 
-## Data Source
+## Data
+
+### Source
 
 **USGS Earthquake Hazards Program — ANSS Comprehensive Earthquake Catalog (ComCat)**
 
 - **API Endpoint:** `https://earthquake.usgs.gov/fdsnws/event/1/query`
-- **Format:** CSV (preferred) or GeoJSON
+- **Format:** CSV
 - **Cost:** Free, no API key required
 - **License:** Public domain (U.S. Government work)
-- **Rate Limit:** 20,000 events per query (paginate by month for large pulls)
+- **Rate Limit:** 20,000 events per query (paginate by month)
 - **Documentation:** https://earthquake.usgs.gov/fdsnws/event/1/
-- **Fields used:** time, latitude, longitude, depth, mag, magType, place, type, status, net, rms, gap, dmin, nst
+
+### Query Specification
+
+- **Time range:** 2000-01-01 to 2025-06-01 (25.5 years)
+- **Minimum magnitude:** 2.5 (practical acquisition threshold; not complete everywhere at this level — all downstream analyses are filtered by local Mc)
+- **Event type:** `earthquake` only (exclude blasts, quarry events)
+- **Fields used:** `time`, `latitude`, `longitude`, `depth`, `mag`, `magType`, `place`, `type`, `id`, `nst`, `gap`, `rms`
 
 ### Data Acquisition Strategy
 
-The USGS API limits each query to 20,000 results. For M2.5+ earthquakes globally over 25 years, we need to paginate. The recommended approach:
+The API returns at most 20,000 events per query. At M2.5+, monthly global counts range from approximately 1,500 to 8,000. The acquisition script should query by month:
 
-```python
-import requests
-import pandas as pd
-import io
-import time
-from datetime import datetime
-
-BASE_URL = "https://earthquake.usgs.gov/fdsnws/event/1/query"
-
-def fetch_month(year, month, min_magnitude=2.5, lat_range=None, lon_range=None):
-    """Fetch one month of earthquake data from USGS ComCat.
-    
-    Args:
-        year: Integer year
-        month: Integer month (1-12)
-        min_magnitude: Minimum magnitude threshold
-        lat_range: Optional tuple (min_lat, max_lat) for regional queries
-        lon_range: Optional tuple (min_lon, max_lon) for regional queries
-    
-    Returns:
-        pd.DataFrame with earthquake catalog data
-    """
-    start = datetime(year, month, 1)
-    if month == 12:
-        end = datetime(year + 1, 1, 1)
-    else:
-        end = datetime(year, month + 1, 1)
-    
-    params = {
-        "format": "csv",
-        "starttime": start.strftime("%Y-%m-%d"),
-        "endtime": end.strftime("%Y-%m-%d"),
-        "minmagnitude": min_magnitude,
-        "orderby": "time-asc",
-    }
-    
-    if lat_range:
-        params["minlatitude"] = lat_range[0]
-        params["maxlatitude"] = lat_range[1]
-    if lon_range:
-        params["minlongitude"] = lon_range[0]
-        params["maxlongitude"] = lon_range[1]
-    
-    response = requests.get(BASE_URL, params=params, timeout=120)
-    response.raise_for_status()
-    return pd.read_csv(io.StringIO(response.text))
-
-def fetch_region(name, years, min_mag, lat_range=None, lon_range=None):
-    """Fetch a full regional catalog with retry logic."""
-    frames = []
-    for year in years:
-        for month in range(1, 13):
-            for attempt in range(3):
-                try:
-                    df = fetch_month(year, month, min_mag, lat_range, lon_range)
-                    frames.append(df)
-                    print(f"  {name} {year}-{month:02d}: {len(df)} events")
-                    time.sleep(0.5)  # Be respectful of the API
-                    break
-                except Exception as e:
-                    if attempt == 2:
-                        print(f"  {name} {year}-{month:02d}: FAILED after 3 attempts - {e}")
-                    else:
-                        time.sleep(2 ** attempt)
-    
-    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+```
+GET /fdsnws/event/1/query?format=csv
+    &starttime={YYYY}-{MM}-01
+    &endtime={YYYY}-{MM+1}-01
+    &minmagnitude=2.5
+    &orderby=time-asc
 ```
 
-### Regional Bounding Boxes
+306 monthly queries, concatenated into a single catalog. Implement retry logic with exponential backoff (the API occasionally returns 503). Rate-limit requests to one every 0.5 seconds.
 
-| Region | Lat Range | Lon Range | Min Mag | Purpose |
-|---|---|---|---|---|
-| Global | — | — | 2.5 | Baseline statistics, subduction zone cascades |
-| Oklahoma + S. Kansas | 33.5°N – 37.5°N | 100.0°W – 94.5°W | 1.0 | Induced seismicity ground truth |
-| Permian Basin (TX/NM) | 30.5°N – 33.5°N | 105.0°W – 100.5°W | 1.0 | Prospective test region |
-| Southern California | 32.0°N – 36.5°N | 121.0°W – 114.5°W | 1.0 | Tectonic control region |
+For the Oklahoma analysis (Notebook 4), pull a separate regional catalog at M1.0+ for the bounding box (33.5°N–37.5°N, 100.0°W–94.5°W) to capture the full induced seismicity sequence including small events.
 
-Southern California serves as the **tectonic control** — a well-monitored, high-seismicity zone with purely tectonic activity and a dense seismic network.
+### Data Validation Checks
+
+1. **Completeness:** Estimate the magnitude of completeness (Mc) per region-year using the maximum curvature method (Wiemer & Wyss 2000): Mc = mode of the magnitude-frequency histogram + 0.2. All statistical analyses should use only events above the local Mc.
+2. **Duplicates:** The same earthquake can appear from multiple seismic networks. Deduplicate by grouping events within 2 seconds and 0.05° of each other, keeping the event with the highest station count (`nst`).
+3. **Magnitude types:** Flag events where `magType` varies. Prefer moment magnitude (`mw`) where available. Note when mixing types.
+4. **Temporal gaps:** Identify any data gaps exceeding 24 hours that could bias inter-event time analyses.
+5. **Network upgrades:** The Oklahoma Geological Survey significantly expanded its network around 2010, lowering Mc. Apparent increases in small-earthquake rates at low magnitudes are partly detection artifacts. This is why Mc-aware analysis is critical — always note this caveat when discussing Oklahoma rate changes.
 
 ### Expected Data Volume
 
-- Global M2.5+, 2000–2025: ~600,000–800,000 events
-- Oklahoma M1.0+, 2000–2025: ~100,000–150,000 events
-- Permian Basin M1.0+, 2010–2025: ~20,000–50,000 events
-- Southern California M1.0+, 2000–2025: ~300,000+ events
+- Global M2.5+, 2000–2025: ~600,000–800,000 events (**actual: 681,450** after cleaning and deduplication)
+- Oklahoma M1.0+, 2000–2025: ~100,000–150,000 events (**actual: 31,187** — lower than projected, reflecting the regional catalog's stricter event-type filtering and deduplication)
 
 ---
 
 ## Analyses
 
-### Notebook 1: The Gutenberg-Richter Anomaly Detector
+### Notebook 0: Data Acquisition and Cleaning
 
-**Scientific background:** The Gutenberg-Richter (GR) law states that earthquake magnitudes follow an exponential distribution: `log₁₀(N) = a - bM`, where `N` is the number of earthquakes ≥ magnitude `M`, `a` reflects total seismicity rate, and `b` describes the ratio of small to large earthquakes. For tectonic seismicity, `b ≈ 1.0`. For induced seismicity, `b` tends to be elevated (1.2–1.5), meaning a higher proportion of small earthquakes relative to large ones.
+**File:** `00_data_acquisition.py`
 
-**The analysis:**
+**Purpose:** Fetch, concatenate, validate, and clean the earthquake catalog.
 
-1. **Compute rolling b-values** using maximum likelihood estimation (Aki, 1965):
-   ```
-   b = log₁₀(e) / (M̄ - M_c + ΔM/2)
-   ```
-   where `M̄` is the mean magnitude, `M_c` is the completeness magnitude, and `ΔM` is the magnitude bin width (typically 0.1). Use sliding windows of 200 events for Oklahoma, the Permian Basin, and Southern California from 2000–2025.
+**Steps:**
+1. Loop over months from 2000-01 to 2025-06. For each month, query the USGS CSV endpoint.
+2. Concatenate all monthly CSVs into a single DataFrame.
+3. Parse the `time` column to UTC datetime. Sort by time.
+4. Remove non-earthquake events (filter on `type` column).
+5. Deduplicate (same `id`, or events within 2s and 0.05° of each other).
+6. Save the cleaned global catalog to `data/earthquake_catalog_global.csv`.
+7. Extract and save the Oklahoma regional catalog separately.
+8. Print summary statistics: total events, date range, magnitude range, events per year.
 
-2. **Changepoint detection** on the b-value time series using PELT (Pruned Exact Linear Time) algorithm. If `ruptures` is unavailable, implement BIC-penalized segmentation manually:
-   ```python
-   # Manual changepoint detection using dynamic programming with BIC
-   def segment_cost(data, start, end):
-       """Gaussian cost of a segment."""
-       segment = data[start:end]
-       n = len(segment)
-       if n < 2:
-           return 0
-       return n * np.log(np.var(segment) + 1e-10)
-   ```
-   Identify the dates when Oklahoma's b-value structurally shifted — do they align with the onset of large-scale injection (~2009) and regulatory intervention (~2015)?
-
-3. **b-value phase portrait:** Plot b-value (y-axis) vs. log₁₀ seismicity rate (x-axis) as a parametric curve over time. Each point represents a rolling window. Color-code by year using a continuous colormap. Tectonic regions should orbit a stable attractor. Induced regions should trace a distinct trajectory — a "fingerprint" loop as injection ramps up and then declines.
-
-4. **The Permian Basin test:** Overlay the Permian Basin's current trajectory on Oklahoma's historical phase portrait with appropriate time offsets.
-
-**Key output:** A phase-space diagram showing Oklahoma's b-value loop (2000→2015→2025) with the Permian Basin's current position marked on it. If the Permian Basin sits on the same trajectory Oklahoma followed circa 2012, that is a novel and significant finding.
-
-**Statistical rigor:**
-- Bootstrap confidence intervals on b-value estimates (1,000 resamples)
-- Kolmogorov-Smirnov tests comparing magnitude distributions between time windows
-- Magnitude of completeness (Mc) estimation using maximum curvature method, applied per-region per-year to avoid detection bias
+**Output:** `data/earthquake_catalog_global.csv`, `data/earthquake_catalog_oklahoma.csv`
 
 ---
 
-### Notebook 2: Interevent Time Forensics
+### Notebook 1: The b-value Stability Atlas
 
-**Scientific background:** If earthquakes were independent events, the time between consecutive earthquakes would follow an exponential distribution (Poisson process = memoryless). Induced seismicity, driven by continuous fluid injection, produces different temporal clustering than tectonic aftershock sequences driven by static stress transfer.
+**File:** `01_bvalue_stability_atlas.ipynb`
 
-**The analysis:**
+**Purpose:** Map both the Gutenberg-Richter b-value and its temporal volatility across the globe.
 
-1. **Interevent time distributions:** For each region, compute the distribution of times between consecutive earthquakes (above Mc). Fit four competing models:
-   - Exponential (Poisson, memoryless)
-   - Gamma (mild clustering)
-   - Log-normal (strong clustering with heavy tail)
-   - Weibull (flexible shape parameter)
-   
-   Use AIC/BIC for model selection. Compare the best-fit model across Oklahoma (pre-injection, during injection, post-regulation), Permian Basin, and Southern California.
+#### 1.1 b-value Estimation
 
-2. **The coefficient of variation (CV) as a discriminant:** CV = σ/μ of interevent times.
-   - Poisson process: CV = 1
-   - Clustered seismicity (aftershock-dominated): CV > 1
-   - Quasi-periodic seismicity: CV < 1
-   
-   Track CV over time in rolling windows. **Hypothesis:** induced seismicity has a *lower* CV than tectonic seismicity because continuous injection produces a more "steady drip" of earthquakes rather than the bursty mainshock-aftershock pattern of tectonic activity.
+Use the maximum-likelihood estimator (Aki 1965):
 
-3. **Hurst exponent estimation** via Detrended Fluctuation Analysis (DFA) on the interevent time series:
-   ```python
-   def dfa(x, scales=None):
-       """Detrended Fluctuation Analysis (Peng et al., 1994).
-       
-       Args:
-           x: 1D array (interevent times)
-           scales: Array of window sizes to evaluate
-       
-       Returns:
-           scales, fluctuations (for log-log regression to get H)
-       """
-       y = np.cumsum(x - np.mean(x))  # Cumulative sum (profile)
-       
-       if scales is None:
-           scales = np.unique(np.logspace(1, np.log10(len(y) // 4), 30).astype(int))
-       
-       fluctuations = []
-       for n in scales:
-           n_segments = len(y) // n
-           if n_segments < 1:
-               continue
-           rms_values = []
-           for i in range(n_segments):
-               segment = y[i * n:(i + 1) * n]
-               # Linear detrend
-               coeffs = np.polyfit(np.arange(n), segment, 1)
-               trend = np.polyval(coeffs, np.arange(n))
-               rms_values.append(np.sqrt(np.mean((segment - trend) ** 2)))
-           fluctuations.append(np.mean(rms_values))
-       
-       # H = slope of log(F(n)) vs log(n)
-       scales_valid = scales[:len(fluctuations)]
-       H = np.polyfit(np.log(scales_valid), np.log(fluctuations), 1)[0]
-       return scales_valid, np.array(fluctuations), H
-   ```
-   
-   H > 0.5 → long-range memory (persistence); H = 0.5 → no memory; H < 0.5 → anti-persistence.
-   
-   **Hypothesis:** tectonic sequences show H > 0.5 (aftershock clustering creates persistence); induced sequences show H closer to 0.5 (injection rate, not prior earthquakes, drives the process).
+```
+b = log₁₀(e) / (M̄ - Mc + ΔM/2)
+```
 
-4. **Autocorrelation structure:** Compute the autocorrelation function of interevent times out to 500 lags. Tectonic sequences should show rapid initial decay (aftershock clustering is local in time) followed by a long tail. Induced sequences may show different structure driven by injection rate cycles.
+where `M̄` is the mean magnitude of events above Mc, and `ΔM` is the magnitude bin width (0.1).
 
-**Key output:** A diagnostic panel comparing the interevent time fingerprint (CV, Hurst exponent, best-fit distribution family, autocorrelation decay rate) for Oklahoma-during-injection vs. Southern California vs. Permian Basin. If these metrics can discriminate induced from tectonic, we have the basis for a classifier.
+For each spatial cell, estimate Mc using the maximum curvature method. Minimum sample size: 50 events per cell for a valid b-estimate. Compute uncertainty as `σ_b = b / √N` (Shi & Bolt 1982).
+
+#### 1.2 Spatial Gridding
+
+Divide the globe into 2° × 2° cells. For each cell with ≥ 50 events above its local Mc, compute the MLE b-value over the full 25-year period.
+
+#### 1.3 Temporal Volatility
+
+For each spatial cell with ≥ 200 events:
+- Divide the cell's catalog into rolling 3-year windows with 1-year stride.
+- Compute b in each window (requiring ≥ 50 events per window).
+- Compute the **coefficient of variation**: `CV_b = std(b_windows) / mean(b_windows)`.
+
+This is the **b-value volatility index** — a proxy for temporal instability in catalog-derived b-value estimates.
+
+**Interpretation caveat:** High CV_b may reflect genuine stress-regime instability, but it can also arise from changing completeness thresholds, sample-size fluctuations in low-seismicity cells, magnitude-type mixing, network upgrades, or sensitivity to windowing choices. We treat physical interpretation (e.g., "this region has an unstable stress regime") as a hypothesis to be tested against these confounds, not as a direct reading of CV_b.
+
+**Hypothesis (to be tested):** After controlling for sample-size effects and Mc stability, CV_b is higher at complex plate boundaries (triple junctions, regions with mixed faulting styles) and lower in simple subduction zones and stable continental interiors.
+
+#### 1.4 Visualizations
+
+1. **Global b-value map** (Robinson projection). Color scale: blue (b < 0.8) → white (b ≈ 1.0) → red (b > 1.2).
+2. **Global b-volatility map** (same projection). Color scale: green (CV < 0.05, stable) → yellow → red (CV > 0.15, volatile).
+3. **b-value vs. depth** scatter plot with density shading, separated by tectonic setting where identifiable.
+4. **Selected b-value time series** for 6 regions: Japan trench, San Andreas, Oklahoma, Sumatra, Iceland, Yellowstone.
 
 ---
 
-### Notebook 3: Aftershock Cascade Networks
+### Notebook 2: The Stress Recovery Clock
 
-**Scientific background:** After a large earthquake, aftershocks form a branching cascade: the mainshock triggers aftershocks, which trigger their own aftershocks, and so on. The structure of this cascade tree — its branching ratio, depth, and spatial extent — encodes information about the mechanical properties of the fault system.
+**File:** `02_stress_recovery_clock.ipynb`
 
-**The analysis:**
+**Purpose:** After major earthquakes, regional seismicity statistics are perturbed. We propose measuring the recovery timescale systematically across all M7+ events in the catalog.
 
-1. **Nearest-neighbor clustering** (Zaliapin & Ben-Zion, 2013): For each earthquake pair (i, j) where j occurs after i, compute a rescaled space-time-magnitude distance:
-   
-   ```
-   η_ij = (t_ij × r_ij^d_f) × 10^(-b × m_i)
-   ```
-   
-   where `t_ij` is the interevent time, `r_ij` is the epicentral distance in km (use Haversine formula), `d_f ≈ 1.6` is the fractal dimension of earthquake epicenters, `b` is the GR b-value, and `m_i` is the magnitude of the earlier event.
-   
-   Each earthquake is assigned to the cluster of its nearest neighbor in this rescaled metric. This produces a forest of directed trees.
+#### 2.1 Mainshock Selection
 
-   **Important implementation note:** This is O(N²) in the naive case. For large catalogs, limit the search to events within a temporal window (e.g., 30 days) and spatial window (e.g., 200 km) to make it tractable. Use scipy.spatial.cKDTree for efficient spatial lookups.
+Select all M ≥ 7.0 events. Decluster by keeping only the largest event within a 100 km / 30-day window. Expected: ~180–220 mainshocks.
 
-2. **Cascade tree statistics:** For each identified mainshock-aftershock sequence (root events with magnitude ≥ 4.0):
-   - **Tree depth:** Maximum chain length from root to leaf
-   - **Branching ratio:** Average number of direct children per node
-   - **Spatial footprint:** Convex hull area of the cascade (km²)
-   - **Temporal span:** Time from mainshock to last identified aftershock
-   - **Magnitude deficit:** Mainshock magnitude minus largest aftershock (Båth's law predicts ~1.2)
-   - **Depth distribution:** Mean and variance of hypocentral depths within the cascade
+#### 2.2 Aftershock Zone Definition
 
-3. **Induced vs. tectonic cascade comparison:** Aggregate cascade statistics for:
-   - Oklahoma M4+ mainshocks during the injection era (2010–2017)
-   - Southern California M4+ mainshocks (2000–2025)
-   - Global subduction zone M6+ mainshocks (for comparison at larger scale)
-   
-   **Hypothesis:** Induced cascades are *shallower trees and wider* (many direct aftershocks triggered by ongoing fluid pressure, fewer secondary aftershocks from stress transfer). Tectonic cascades are *deeper trees and narrower* (cascading chains of stress-triggered events).
+For each mainshock of magnitude M:
+- Spatial radius: `R = 10^(0.5*M - 1.8)` km (approximate Wells & Coppersmith 1994 scaling).
+- Temporal window: 1000 days post-mainshock.
 
-4. **Network visualization:** For notable cascades in each region, render the triggering tree as a directed graph:
-   - Node size ∝ magnitude
-   - Edge color → time delay (log scale, dark = minutes, light = days)
-   - Spatial layout matching geographic coordinates (lat/lon)
-   - Annotate with cascade statistics
+Collect all M2.5+ events within this space-time window.
 
-   Visualize side-by-side: Oklahoma's 2016 M5.8 Pawnee earthquake cascade vs. a comparable Southern California tectonic sequence (e.g., 2019 M7.1 Ridgecrest or 2010 M7.2 El Mayor-Cucapah).
+#### 2.3 Recovery Metrics
 
-**Key output:** Side-by-side cascade tree visualizations with statistical comparison. A Mann-Whitney U test on branching ratios and tree depths between induced and tectonic populations.
+For each mainshock, compute the following in 30-day sliding windows (10-day stride):
+
+**Metric A — b-value recovery:**
+- Compute b in each window (if ≥ 30 events).
+- Compute a "pre-mainshock baseline" b from events in the same spatial zone during the 5 years before the mainshock.
+- Define recovery fraction: `f(t) = 1 - |b(t) - b_baseline| / |b(t=0) - b_baseline|`.
+- Fit an exponential: `f(t) = 1 - exp(-t / τ_b)`.
+- **τ_b is the b-value recovery time constant** (days).
+
+**Metric B — Seismicity rate recovery (Omori decay):**
+- Compute event rate in each 30-day window.
+- Fit the Modified Omori Law: `R(t) = K · (t + c)^(-p)`.
+- Extract the p-value (decay exponent) and c-value (onset delay).
+
+**Metric C — Inter-event time recovery:**
+- Compute mean and CV of inter-event times in each window.
+- Track when CV returns to within 1σ of the pre-mainshock baseline.
+
+**Methodological caveats:** The recovery fraction formula is a candidate operational definition, not "the" recovery clock. Known failure modes include: (1) if the initial perturbation is weak, the denominator |b(0) - b_baseline| approaches zero and the fraction becomes unstable; (2) not all mainshocks will have sufficient pre-event or post-event data for robust fitting; (3) exponential recovery may not fit many sequences well — some may show step-like returns, oscillations, or no clear recovery within 1000 days. Where exponential fitting fails (R² < 0.3 or unstable parameter estimates), report nonparametric return-to-baseline metrics instead: the first window where b returns to within 1σ of baseline, or flag the sequence as "no clear recovery." Report the number of well-constrained recoveries alongside the total attempted.
+
+#### 2.4 Cross-Comparison
+
+- τ_b vs. mainshock magnitude (scatter with regression).
+- τ_b vs. tectonic setting (subduction, transform, normal, intraplate — classified by depth and region).
+- Omori p-value vs. τ_b (are fast decays associated with fast b-value recovery?).
+- Histogram of τ_b across all well-constrained mainshocks.
+
+#### 2.5 Visualizations
+
+1. **Recovery curve gallery**: 3×3 grid of b-value and rate recovery curves for 9 major earthquakes (e.g., 2004 Sumatra, 2010 Chile, 2011 Tohoku, 2015 Nepal, 2023 Turkey-Syria).
+2. **τ_b vs. magnitude** scatter with regression line and R².
+3. **Global map** of mainshock locations colored by τ_b.
+4. **Omori p-value histogram** with vertical line at p = 1.0.
 
 ---
 
-### Notebook 4: The Permian Basin Early Warning Score
+### Notebook 3: Inter-Event Time Regime Classification
 
-**Scientific background:** This notebook synthesizes the fingerprints from Notebooks 1–3 into a composite "induced seismicity score" and applies it prospectively to the Permian Basin.
+**File:** `03_interevent_regime_classification.ipynb`
 
-**The analysis:**
+**Purpose:** For every seismically active region on Earth, determine which statistical family best describes regional inter-event times — and map the result.
 
-1. **Feature engineering:** For each region-year combination, compute a feature vector:
-   - GR b-value (from Notebook 1)
-   - log₁₀ seismicity rate (events/month above Mc)
-   - Rate of change of seismicity rate (Δrate / Δyear)
-   - Interevent time CV (from Notebook 2)
-   - Hurst exponent H (from Notebook 2)
-   - Best-fit interevent time distribution (encoded: exponential=0, gamma=1, lognormal=2, weibull=3)
-   - Mean cascade branching ratio for M3+ mainshocks (from Notebook 3, where available)
-   - Mean cascade tree depth for M3+ mainshocks (from Notebook 3, where available)
+#### 3.1 Spatial Cells
 
-2. **Labeled training set:**
-   
-   | Region | Years | Label |
-   |---|---|---|
-   | Oklahoma | 2000–2008 | `tectonic` |
-   | Oklahoma | 2009–2014 | `induced_rising` |
-   | Oklahoma | 2015 | `induced_peak` |
-   | Oklahoma | 2016–2025 | `induced_declining` |
-   | Southern California | 2000–2025 | `tectonic` |
-   
-   For the binary classifier, collapse to `induced` (any induced_* label) vs `tectonic`.
+Same 2° × 2° grid as Notebook 1. Include only cells with ≥ 100 events and median inter-event time < 30 days.
 
-3. **Classification:**
-   - **Logistic Regression** (for interpretability — which features matter most?)
-   - **Random Forest** (for performance comparison)
-   - Use leave-one-year-out cross-validation
-   - Report accuracy, precision, recall, F1, and ROC-AUC
+#### 3.2 Inter-Event Time Computation
 
-4. **Prospective application to the Permian Basin:**
-   Apply the trained classifier to Permian Basin data from 2015–2025. For each year, output:
-   - Predicted class (induced vs. tectonic)
-   - Predicted probability of induced origin
-   - Which features are driving the classification (logistic regression coefficients or feature importances)
+For each cell, compute Δt_i = t_{i+1} - t_i for all consecutive event pairs. Convert to hours.
 
-5. **The Oklahoma Clock:**
-   For each Permian Basin year, compute the Euclidean distance in (standardized) feature space to each Oklahoma year. The nearest Oklahoma year is the "clock reading" — it tells you where on Oklahoma's trajectory the Permian Basin currently sits.
-   
-   If the answer is "Oklahoma circa 2011–2012," that provides a concrete, data-driven basis for concern about future escalation.
+#### 3.3 Distribution Fitting
 
-**Key output:** 
-- A timeline plot showing the Permian Basin's induced-seismicity probability from 2015 to 2025, overlaid with Oklahoma's historical probability trajectory (time-shifted).
-- The Oklahoma Clock visualization — a radial or linear diagram showing which Oklahoma year the Permian Basin most closely resembles, year by year.
-- Feature importance analysis showing which statistical fingerprints are most diagnostic.
+Fit four candidate distributions using MLE (via `scipy.stats`):
+
+| Distribution | Parameters | Physical Interpretation |
+|---|---|---|
+| Exponential | λ (rate) | Memoryless / Poisson process |
+| Weibull | k (shape), λ (scale) | k < 1: clustered; k > 1: quasi-periodic |
+| Gamma | α (shape), β (scale) | Mixture of Poisson-like processes |
+| Log-normal | μ, σ | Multiplicative random processes |
+
+Use **AIC** for model selection. The winning model is the one with the lowest AIC. Compute ΔAIC between the best and second-best model; only assign a definitive classification when ΔAIC > 10.
+
+#### 3.4 Distributional Class Assignment
+
+These are **statistical fit categories**, not validated physical process labels. A cell classified as "Poisson-like" means the exponential distribution fits best — it does not prove the underlying process is memoryless. Similarly, "clustered" and "quasi-periodic" describe the shape of the best-fitting distribution, not confirmed physical mechanisms.
+
+- **Poisson-like:** Exponential wins, or Weibull wins with k ∈ [0.9, 1.1].
+- **Clustered-like:** Weibull with k < 0.9, or gamma with α < 0.9.
+- **Quasi-periodic-like:** Weibull with k > 1.1.
+- **Ambiguous:** No model achieves ΔAIC > 10 over its nearest competitor.
+
+#### 3.5 Visualizations
+
+1. **Global distributional class map**: Color-coded by best-fitting category (Poisson-like = blue, Clustered-like = red, Quasi-periodic-like = green, Ambiguous = gray).
+2. **Weibull k map**: Continuous color scale for cells where Weibull is the best or near-best fit.
+3. **Example distributions**: 4-panel figure showing one representative cell from each regime, with empirical CDF, fitted distributions, and QQ-plots.
+4. **k vs. b scatter**: Explore whether the Weibull shape parameter correlates with the b-value.
+5. **k vs. depth**: Test whether temporal regime varies with predominant event depth.
+
+---
+
+### Notebook 4: The Oklahoma Experiment
+
+**File:** `04_oklahoma_experiment.ipynb`
+
+**Purpose:** Track the full statistical lifecycle of induced seismicity in Oklahoma, treating it as a natural experiment in regime change.
+
+This notebook uses the Oklahoma regional catalog (M1.0+, 33.5°N–37.5°N, 100.0°W–94.5°W).
+
+#### 4.1 Phase Identification
+
+Define phases by annual M3+ event counts (boundaries are approximate and should be confirmed from the data):
+- **Baseline** (2000–2008): Background seismicity (~1–5 M3+ events/year).
+- **Onset** (2009–2012): Gradual increase, historically associated with rising wastewater injection volumes (Ellsworth 2013; Langenbruch & Zoback 2016). This project does not ingest injection data directly — phase labels are interpreted in the context of prior Oklahoma work.
+- **Surge** (2013–2016): Rapid escalation; Oklahoma briefly becomes the most seismically active state in the contiguous US.
+- **Regulation** (2016–2019): Volume reduction directives take effect; seismicity declines.
+- **Recovery** (2020–2025): Rates lower, but have they returned to baseline?
+
+#### 4.2 Multi-Metric Tracking
+
+For each phase, compute:
+1. **Monthly event count** (M2.5+ and M3.0+ separately, both above local Mc).
+2. **b-value** (rolling 6-month window, ≥ 30 events per window, above Mc).
+3. **Mc** (rolling estimate to track network evolution).
+4. **Inter-event time distribution** — fit Weibull, extract shape parameter k.
+5. **Spatial centroid** — track how the geographic center of seismicity migrates over time.
+6. **Maximum magnitude per quarter** — track the evolving hazard ceiling.
+7. **Nearest-neighbor distance distribution** — compute the Hopkins statistic as a measure of spatial clustering.
+
+#### 4.3 Phase Comparison
+
+For each metric, compare values across phases. Use bootstrap confidence intervals (1000 resamples) to assess whether phase differences are statistically meaningful.
+
+Key questions (all framed as hypotheses to test):
+- Does the b-value change systematically across phases? Some prior work suggests elevated b during induced phases, but a recent review (Atkinson et al. 2023) notes that induced-sequence b-values are broadly distributed near 1.0. We test this.
+- Does the Weibull k parameter change? This is exploratory — we are not aware of prior work specifically tracking k across the Oklahoma lifecycle.
+- Does the inter-event time distribution shift from one regime type to another across phases?
+
+#### 4.4 Visualizations
+
+1. **Oklahoma seismicity timeline**: Dual-axis plot with monthly event count (bars) and rolling b-value (line). Phase boundaries as vertical dashed lines.
+2. **Spatial evolution**: 5-panel map (one per phase) showing earthquake locations color-coded by depth.
+3. **Weibull k evolution**: Time series of the shape parameter with a horizontal reference at k = 1 (Poisson).
+4. **Phase comparison summary**: Table or grouped bar chart showing each metric's mean ± bootstrap CI by phase.
+5. **Recovery assessment**: Current-period (2023–2025) metrics vs. baseline (2000–2008) with confidence intervals. Does the system look like it did before injection?
+
+---
+
+### Notebook 5: The Seismic Entropy Index
+
+**File:** `05_seismic_entropy_index.ipynb`
+
+**Purpose:** Construct a continuous time series of the Shannon entropy of earthquake magnitude distributions, and test whether it carries any information about the approach of large events.
+
+**Important caveat up front:** Earthquake prediction remains an unsolved problem in geophysics. This analysis is exploratory. We expect, based on prior work and the base-rate difficulty of the problem, that any signal will be weak at best — and the null result (no predictive information) is a valid and publishable finding.
+
+#### 5.1 Entropy Computation
+
+Shannon entropy of the magnitude distribution in a time window:
+
+```
+H = -Σ p_i · log₂(p_i)
+```
+
+where p_i is the proportion of events in magnitude bin i.
+
+**Binning:** Magnitude bins of width 0.5 from Mc to 7.5+.
+
+**Windows:** 90-day rolling windows with 7-day stride. Require ≥ 100 events per window.
+
+#### 5.2 Global Entropy Time Series
+
+Compute H(t) for the full global catalog. High entropy means a diverse mix of magnitudes; low entropy means activity is concentrated in a narrow range (e.g., dominated by small aftershocks following a large event).
+
+#### 5.3 Global Temporal Association Test
+
+The global entropy time series is a scalar — it has no spatial centroid. So the global test is **time-only**: does a drop in global H precede M7+ earthquakes anywhere on Earth?
+
+Define entropy anomalies as windows where H(t) drops below its 5th percentile. For each anomaly, check whether a M7+ earthquake occurred globally within 180 days after the anomaly's start date. Compute hit rate and false alarm rate.
+
+**Null model:** Shuffle event magnitudes randomly (preserving times and locations). Repeat the anomaly detection. Compare the observed hit rate against the null distribution. This directly tests whether observed entropy drops are more predictive than chance.
+
+We expect this global test to be weak or null — a global scalar is a blunt instrument, and large earthquakes are common enough at M7+ that random association is plausible.
+
+#### 5.4 Regional Entropy (Spatially Resolved)
+
+The more informative test is regional, where each time series has a defined spatial footprint. Compute H(t) separately for 5 high-seismicity regions:
+- Japan
+- California
+- Indonesia-Philippines
+- Mediterranean
+- South America (Andean subduction)
+
+For each region, test whether entropy drops precede M6.5+ earthquakes *within that same region* within 180 days. This is the spatially coherent version of the test. Compare against region-specific null models (shuffled magnitudes within each region).
+
+Test whether any entropy-event association is consistent across regions or region-specific.
+
+#### 5.5 Visualizations
+
+1. **Global entropy time series**: 25-year H(t) with M7+ earthquakes as vertical red lines. Entropy anomalies shaded.
+2. **Superposed epoch analysis**: Align all M7+ earthquakes at t = 0. Plot the average global entropy curve from -365 to +365 days. Overlay the null model (shuffled) with 95% confidence band.
+3. **Regional entropy panels**: One per region, H(t) with regional M6.5+ events marked.
+4. **Regional ROC-like curves**: For each region, vary the anomaly threshold from the 1st to 20th percentile. Plot hit rate vs. false alarm rate. Compare against the region-specific null.
+5. **Entropy vs. b-value scatter**: Across all spatial cells (from Notebook 1), plot mean H vs. mean b. Explore whether they are correlated.
 
 ---
 
 ## Project Structure
 
 ```
-seismic-fingerprints/
+the-memory-of-the-earth/
 ├── README.md
 ├── requirements.txt
-├── data/
-│   ├── raw/                          # Raw CSV pulls from USGS API
-│   │   ├── global_M2.5/             # Monthly CSV files
-│   │   ├── oklahoma_M1.0/
-│   │   ├── permian_M1.0/
-│   │   └── socal_M1.0/
-│   └── processed/                    # Cleaned, merged datasets
-│       ├── catalog_global.parquet
-│       ├── catalog_oklahoma.parquet
-│       ├── catalog_permian.parquet
-│       └── catalog_socal.parquet
-├── notebooks/
-│   ├── 00_data_acquisition.ipynb     # API pulls and data cleaning
-│   ├── 01_gutenberg_richter.ipynb    # b-value analysis and changepoints
-│   ├── 02_interevent_forensics.ipynb # Temporal statistics
-│   ├── 03_cascade_networks.ipynb     # Aftershock triggering trees
-│   └── 04_early_warning_score.ipynb  # Composite classifier
+├── 00_data_acquisition.py
+├── 01_bvalue_stability_atlas.ipynb
+├── 02_stress_recovery_clock.ipynb
+├── 03_interevent_regime_classification.ipynb
+├── 04_oklahoma_experiment.ipynb
+├── 05_seismic_entropy_index.ipynb
 ├── src/
 │   ├── __init__.py
-│   ├── fetch.py                      # USGS API client with pagination
-│   ├── catalog.py                    # Data cleaning, Mc estimation
-│   ├── gutenberg_richter.py          # b-value estimation, changepoints
-│   ├── temporal.py                   # Interevent time analysis, DFA
-│   ├── cascades.py                   # Nearest-neighbor clustering
-│   └── plotting.py                   # Consistent visualization style
-└── figures/                          # Publication-quality outputs
-    ├── oklahoma_bvalue_loop.png
-    ├── interevent_fingerprint_panel.png
-    ├── cascade_comparison.png
-    └── permian_early_warning.png
+│   ├── fetch.py                      # USGS API client with pagination and retry
+│   ├── catalog.py                    # Data loading, cleaning, Mc estimation
+│   ├── gutenberg_richter.py          # b-value MLE, uncertainty, rolling computation
+│   ├── interevent.py                 # Inter-event time computation and distribution fitting
+│   ├── entropy.py                    # Shannon entropy of magnitude distributions
+│   ├── omori.py                      # Modified Omori Law fitting
+│   ├── spatial.py                    # Gridding, spatial queries, haversine distances
+│   └── plotting.py                   # Shared visualization style and helper functions
+├── data/
+│   └── .gitkeep                      # Catalog CSVs generated by 00_
+├── figures/
+│   └── .gitkeep                      # Publication-quality output figures
+└── LICENSE
 ```
 
 ---
@@ -383,95 +405,144 @@ seismic-fingerprints/
 pandas>=2.0
 numpy>=1.24
 scipy>=1.11
-scikit-learn>=1.3
 matplotlib>=3.7
 seaborn>=0.12
-networkx>=3.1
+scikit-learn>=1.3
 requests>=2.31
-pyarrow>=12.0
+jupyter>=1.0
 ```
-
-**Optional but recommended:**
-```
-ruptures>=1.1          # Changepoint detection (PELT algorithm)
-statsmodels>=0.14      # ACF/PACF functions, statistical tests
-```
-
-If `ruptures` is unavailable, implement changepoint detection manually using BIC-penalized segmentation with scipy.optimize. If `statsmodels` is unavailable, implement autocorrelation from scratch using numpy.correlate.
 
 ---
 
-## Implementation Notes for Claude Code
+## Implementation Notes
 
 ### Priority Order
 
-Build in this order. Each notebook should be self-contained (imports its own data) and produce its own figures saved to `figures/`:
+Build in this order. Each notebook should be self-contained and produce its own figures:
 
-1. **`src/` modules first** — Build the shared library code before the notebooks. Each module should have docstrings and be importable.
-
-2. **`00_data_acquisition.ipynb`** — This must work first. Handle API pagination robustly (retries with exponential backoff, rate limiting at 0.5s between requests, resumption from partial downloads by checking existing files). Save raw CSVs per-month and processed parquets per-region. Validate: check for duplicates, NaN magnitudes, events with type != "earthquake".
-
-3. **`01_gutenberg_richter.ipynb`** — The b-value phase portrait is the project's signature visualization. Use a continuous colormap (e.g., `plt.cm.viridis`) along the time axis so the viewer can trace Oklahoma's trajectory through time. Include arrows on the trajectory to show direction.
-
-4. **`02_interevent_forensics.ipynb`** — DFA from scratch if needed (the code is provided above). Validate the DFA implementation by testing on fractional Brownian motion with known H.
-
-5. **`03_cascade_networks.ipynb`** — Subsample to M2.5+ for the nearest-neighbor clustering (full catalog is too large). Use scipy.spatial.cKDTree for spatial queries. Limit temporal search window to 30 days.
-
-6. **`04_early_warning_score.ipynb`** — Keep the classifier simple. The story is in the features and the Oklahoma Clock, not in model complexity.
+1. **`src/` modules first.** Build the shared library before the notebooks. Each module should have docstrings and be independently importable.
+2. **`00_data_acquisition.py`** — Must work first. Handle API pagination robustly with retries, rate limiting, and resumption from partial downloads.
+3. **Notebooks 1 through 5** in order. Each depends on the catalog produced by Notebook 0 but is otherwise independent of the other notebooks.
 
 ### Visualization Standards
 
-- Consistent color palette across ALL notebooks:
-  - Oklahoma: `#E63946` (red)
-  - Permian Basin: `#F4A261` (amber/orange)
-  - Southern California: `#457B9D` (steel blue)
-  - Global/other: `#2A9D8F` (teal)
-  - Background periods (pre-injection): use lighter/desaturated versions of region colors
-- All figures: 300 DPI, `figsize=(12, 7)` default, `plt.style.use('seaborn-v0_8-whitegrid')` or similar clean style
-- Label axes with units. Always. "Magnitude (M_L)" not just "Magnitude".
-- Include Mc annotations on any magnitude-frequency plot
-- Save every figure to both `figures/` directory and display inline
+- All figures: 300 DPI, `figsize=(12, 7)` default, clean white-grid style.
+- Label all axes with units.
+- Include Mc annotations on any magnitude-frequency plot.
+- Save every figure to `figures/` directory and display inline.
+- Use a consistent, colorblind-friendly palette.
 
 ### Data Quality Considerations
 
-- **Magnitude of completeness (Mc):** Estimate using the maximum curvature method (MAXC) for each region-year. Only analyze events above Mc. For cross-region rate comparisons, use a conservative common Mc (M2.5 for Oklahoma vs. SoCal; M3.0 for formal statistical tests).
-- **Magnitude types:** Filter to preferred magnitudes or note when mixing types. For Oklahoma, most events are ml or mb. For California, most are ml or mw.
-- **Duplicate events:** Same earthquake can appear from multiple networks. Deduplicate: group by (time ± 2 seconds, lat ± 0.05°, lon ± 0.05°), keep the event from the preferred network (or with the most station picks, i.e., highest `nst`).
-- **Event types:** Filter to `type == "earthquake"`. Exclude quarry blasts (`type == "quarry blast"`), explosions, etc.
-- **Network upgrades:** The Oklahoma Geological Survey significantly expanded its network ~2010, lowering Mc. The *apparent* increase in small earthquakes is partly detection artifact. This is why Mc-aware analysis is critical. Always note this caveat when discussing Oklahoma rate changes at low magnitudes.
+- **Magnitude of completeness (Mc):** Estimate using the maximum curvature method (MAXC) for each region-year. Only analyze events above Mc. For cross-region comparisons, use a conservative common Mc.
+- **Magnitude types:** Filter to preferred magnitudes or note when mixing types.
+- **Duplicate events:** Same earthquake can appear from multiple networks. Deduplicate by grouping on (time ± 2s, lat ± 0.05°, lon ± 0.05°), keeping the event with the most station picks.
+- **Event types:** Filter to `type == "earthquake"`. Exclude quarry blasts, explosions, etc.
+- **Network upgrades:** The Oklahoma Geological Survey significantly expanded its network ~2010, lowering Mc. The apparent increase in small earthquakes is partly a detection artifact. This is why Mc-aware analysis is critical.
 
 ---
 
 ## Key References
 
-- Gutenberg & Richter (1944). Frequency of earthquakes in California. *BSSA*.
-- Aki (1965). Maximum likelihood estimate of b. *Bull. Earthq. Res. Inst.*
-- Omori (1894). On the aftershocks of earthquakes. *J. Coll. Sci.*
-- Utsu (1961). A statistical study on the occurrence of aftershocks. *Geophys. Mag.*
-- Zaliapin & Ben-Zion (2013). Earthquake clusters in southern California. *JGR*.
-- Peng et al. (1994). Mosaic organization of DNA nucleotides. *Physical Review E*.
-- Langenbruch & Zoback (2016). How will induced seismicity in Oklahoma respond to decreased saltwater injection rates? *Science Advances*.
-- Skoumal et al. (2024). Reduced injection rates and shallower depths mitigated induced seismicity in Oklahoma. *The Seismic Record*.
-- Ellsworth (2013). Injection-induced earthquakes. *Science*, 341(6142).
+- Aki, K. (1965). Maximum likelihood estimate of b in the formula log N = a − bM. *Bull. Earthq. Res. Inst.*, 43, 237–239.
+- Atkinson, G.M. et al. (2023). The physical mechanisms of induced earthquakes. *Nature Reviews Earth & Environment*, 4, 847–863.
+- Corral, Á. (2004). Long-term clustering, scaling, and universality in the temporal occurrence of earthquakes. *Physical Review Letters*, 92(10), 108501.
+- Ellsworth, W.L. (2013). Injection-induced earthquakes. *Science*, 341(6142), 1225942.
+- Gutenberg, B. & Richter, C.F. (1944). Frequency of earthquakes in California. *BSSA*, 34(4), 185–188.
+- Hasumi, T. et al. (2009). The Weibull–log Weibull distribution for interoccurrence times of earthquakes. *Physica A*, 388(4), 491–498.
+- Langenbruch, C. & Zoback, M.D. (2016). How will induced seismicity in Oklahoma respond to decreased saltwater injection rates? *Science Advances*, 2(11), e1601542.
+- Shi, Y. & Bolt, B.A. (1982). The standard error of the magnitude-frequency b value. *BSSA*, 72(5), 1677–1687.
+- Tormann, T. et al. (2015). Randomness of megathrust earthquakes implied by rapid stress recovery after the Japan earthquake. *Nature Geoscience*, 8, 152–158.
+- Wells, D.L. & Coppersmith, K.J. (1994). New empirical relationships among magnitude, rupture length, rupture width, rupture area, and surface displacement. *BSSA*, 84(4), 974–1002.
+- Wiemer, S. & Wyss, M. (2000). Minimum magnitude of completeness in earthquake catalogs. *BSSA*, 90(4), 859–869.
 
 ---
 
-## Expected Novel Contributions
+## Results
 
-1. **The b-value phase portrait** as a visual and quantitative method for tracking induced seismicity trajectories through (a, b) parameter space over time. This representation — plotting b vs. log₁₀(rate) as a parametric curve — has not been systematically applied to compare induced seismicity regions against each other or to track the full rise-peak-decline arc of an induced seismicity episode.
+The following findings emerged from running the full analysis pipeline on 681,450 global M2.5+ events and 31,187 Oklahoma M1.0+ events (2000–2025).
 
-2. **Interevent time fingerprinting** using the composite of (CV, Hurst exponent, distribution family, ACF decay rate) as a discriminant between induced and tectonic seismicity. Individual metrics have been studied in isolation; the composite fingerprint has not been systematically benchmarked across the Oklahoma natural experiment.
+### 1. The b-value Stability Atlas (Notebook 1)
 
-3. **Cascade morphology comparison** between induced and tectonic sequences using the Zaliapin-Ben-Zion nearest-neighbor method, specifically testing the hypothesis that induced cascades are shallower/wider than tectonic cascades due to the dominance of fluid-pressure triggering over stress-transfer triggering.
+The global 2°×2° b-value grid produced **709 cells** with valid estimates (≥50 events above local Mc).
 
-4. **Prospective application to the Permian Basin** using a classifier trained on Oklahoma's full historical trajectory. The "Oklahoma Clock" concept — mapping the Permian Basin's current state to a specific phase of Oklahoma's history — is a novel framing that translates complex multi-dimensional statistics into an intuitive, actionable output.
+- **Global median b-value: 1.09**, consistent with the canonical Gutenberg-Richter value of ~1.0 but with substantial regional variation (range: 0.40–2.18).
+- **Temporal volatility (CV_b)** was computed for **303 cells** with ≥200 events. **Median CV_b = 0.108** (range: 0.000–0.594), indicating that most regions show ~10% temporal variation in b over rolling 3-year windows.
+- The b-value vs. depth analysis reveals systematic trends consistent with increasing differential stress at depth.
+- Regional time series for six zones (Japan Trench, San Andreas, Oklahoma, Sumatra, Iceland, Yellowstone) show that tectonically simple regions maintain more stable b-values, while Oklahoma exhibits pronounced shifts coinciding with the induced seismicity episode.
+
+### 2. The Stress Recovery Clock (Notebook 2)
+
+From **387 M7+ events** (362 after declustering within 100 km / 30 days), **139 mainshock sequences** had sufficient aftershock data for recovery analysis.
+
+- **17 sequences** (12%) produced well-constrained exponential recovery fits (R² > 0.3). The majority of sequences show complex, non-exponential recovery patterns — step-like returns, oscillations, or no clear recovery within 1000 days.
+- **Modified Omori Law**: Median p = **1.86**, mean p = **1.98** — substantially higher than the canonical p ≈ 1.0, indicating faster-than-expected aftershock decay rates in the global catalog. This may reflect improved catalog completeness in recent decades capturing the true decay shape.
+- The limited number of well-constrained recoveries (17/139) confirms the methodological caveat in the analysis design: exponential recovery is a candidate model, not a universal law. Many sequences require nonparametric characterization.
+
+### 3. Inter-Event Time Regime Classification (Notebook 3)
+
+**715 cells** met the classification criteria (≥100 events, median IET < 30 days). Distribution fitting with AIC model selection yielded:
+
+| Regime | Count | Fraction |
+|--------|-------|----------|
+| **Clustered-like** | 650 | 90.9% |
+| **Ambiguous** | 53 | 7.4% |
+| **Poisson-like** | 12 | 1.7% |
+| **Quasi-periodic-like** | 0 | 0.0% |
+
+The overwhelming dominance of clustered behavior (Weibull k < 0.9 or gamma α < 0.9) is consistent with aftershock-driven seismicity globally. The near-absence of quasi-periodic behavior suggests that clock-like earthquake recurrence, while theoretically predicted for some fault systems, is not resolvable at the 2°×2° spatial scale and M2.5+ magnitude threshold of this catalog. The small number of Poisson-like cells likely represents regions where aftershock sequences are short relative to the observation window.
+
+### 4. The Oklahoma Experiment (Notebook 4)
+
+The Oklahoma M1.0+ catalog (31,187 events) was divided into five phases:
+
+| Phase | Events | Monthly Mean | b-value (95% CI) | Weibull k |
+|-------|--------|-------------|-------------------|-----------|
+| **Baseline** (2000–08) | 44 | 1.5 | N/A (too few) | N/A |
+| **Onset** (2009–12) | 488 | 10.4 | 0.99 (0.89–1.08) | 0.54 |
+| **Surge** (2013–16) | 9,923 | 236.3 | 1.16 (1.13–1.19) | 0.43 |
+| **Regulation** (2016–19) | 5,965 | 142.0 | 1.20 (1.15–1.25) | 0.65 |
+| **Recovery** (2020–25) | 14,767 | 205.1 | 0.93 (0.92–0.95) | 0.69 |
+
+Key findings:
+- **b-value elevation during Surge and Regulation** (b ≈ 1.16–1.20) followed by a return to b ≈ 0.93 in Recovery — below the Onset value, suggesting a systematic shift in the magnitude distribution.
+- **Weibull k consistently below 1.0** across all phases with sufficient data, confirming persistent temporal clustering. The lowest k (0.43) during the Surge reflects intense aftershock-dominated activity; the gradual increase toward k ≈ 0.69 in Recovery indicates partial but incomplete return toward Poisson-like timing.
+- **Spatial centroid migration**: Activity shifted northward during the Surge (centroid ~36.5°N) and partially returned southward in Recovery (~35.7°N).
+- The Recovery phase has **not** returned to Baseline: monthly rates remain ~140× higher, and the Weibull k and spatial footprint differ substantially from the pre-injection state.
+
+### 5. The Seismic Entropy Index (Notebook 5)
+
+Shannon entropy of the global magnitude distribution was computed in 90-day rolling windows (7-day stride, ≥100 events per window).
+
+- **1,344 valid entropy windows** spanning 2000–2025. **H range: 1.945–2.560 bits**.
+- **68 entropy anomalies** identified (5th percentile threshold).
+- **Global association test**: Observed hit rate = **1.000**, null model hit rate = **1.000**, p-value = **1.000**. This is a **null result** — entropy anomalies are no more predictive of M7+ events than chance, as expected. At the global scale, M7+ events are frequent enough (~15/year) that any 180-day window following an anomaly is virtually certain to contain one regardless of the entropy signal.
+- **Superposed epoch analysis**: 384 M7+ events were aligned. The observed mean entropy curve falls within the null model 95% confidence interval, confirming no systematic entropy precursor pattern at the global scale.
+- **Regional analysis**: Japan (37,075 events, 109 M6.5+), California (38,985 events, 5 M6.5+), Indonesia-Philippines (61,609 events, 184 M6.5+), Mediterranean (43,800 events, 20 M6.5+), and South America (42,980 events, 100 M6.5+) each show distinct entropy dynamics reflecting their tectonic character and catalog completeness.
+
+The entropy analysis confirms the prediction stated in the experimental design: **global magnitude entropy does not carry operationally useful predictive information about large earthquakes.** This null result is itself informative — it demonstrates that the statistical structure of the magnitude distribution, while varying meaningfully over time, does not systematically anticipate the occurrence of large events.
 
 ---
 
-## License
+## Ethical Note
 
-MIT
+This project analyzes historical earthquake data for scientific understanding. **Nothing in this analysis should be interpreted as earthquake prediction.** Earthquake prediction remains an unsolved problem. Notebook 5 (the entropy analysis) explicitly tests — and is expected to demonstrate — the *limits* of statistical precursory signals, not their operational utility. We believe the null result is as valuable as a positive one.
 
 ---
 
-*Conceived and designed by Claude (Opus 4.6, Anthropic) as a demonstration that AI systems can formulate novel scientific hypotheses, design rigorous analytical frameworks, and specify complete reproducible projects — not just execute instructions.*
+## How to Run
+
+```bash
+# 1. Install dependencies
+pip install -r requirements.txt
+
+# 2. Fetch the data (~20-40 min depending on API speed)
+python 00_data_acquisition.py
+
+# 3. Run notebooks in order
+jupyter notebook 01_bvalue_stability_atlas.ipynb
+```
+
+---
+
+*Analytical framework designed by Claude (Opus 4.6, Anthropic). Implementation by Claude Code. Facilitated by Eternity.*

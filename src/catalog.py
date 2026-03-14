@@ -1,8 +1,8 @@
 """Earthquake catalog data cleaning and preparation.
 
 Provides utilities for loading raw CSV earthquake catalogs, cleaning and
-deduplicating events, estimating magnitude of completeness, and writing
-processed catalogs to Parquet format.
+deduplicating events, estimating magnitude of completeness, and identifying
+temporal gaps.
 """
 
 from pathlib import Path
@@ -10,46 +10,13 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-
-REGION_COLORS: dict[str, str] = {
-    "oklahoma": "#E63946",
-    "permian": "#F4A261",
-    "socal": "#457B9D",
-    "global": "#2A9D8F",
-}
-
-REGION_BOUNDS: dict[str, dict] = {
-    "oklahoma": {
-        "lat_range": (33.5, 37.5),
-        "lon_range": (-100.0, -94.5),
-        "min_mag": 1.0,
-    },
-    "permian": {
-        "lat_range": (30.5, 33.5),
-        "lon_range": (-105.0, -100.5),
-        "min_mag": 1.0,
-    },
-    "socal": {
-        "lat_range": (32.0, 36.5),
-        "lon_range": (-121.0, -114.5),
-        "min_mag": 1.0,
-    },
-    "global": {
-        "lat_range": None,
-        "lon_range": None,
-        "min_mag": 2.5,
-    },
-}
 
 # ---------------------------------------------------------------------------
 # Loading
 # ---------------------------------------------------------------------------
 
 
-def load_raw_csvs(raw_dir: str | Path) -> pd.DataFrame:
+def load_raw_csvs(raw_dir):
     """Load and concatenate all CSV files from *raw_dir*.
 
     Parameters
@@ -84,12 +51,12 @@ def load_raw_csvs(raw_dir: str | Path) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 
-def clean_catalog(df: pd.DataFrame) -> pd.DataFrame:
+def clean_catalog(df):
     """Clean a raw earthquake catalog dataframe.
 
     Steps performed:
     1. Filter rows to ``type == "earthquake"`` (if a *type* column exists).
-    2. Parse the *time* column to ``datetime64``.
+    2. Parse the *time* column to ``datetime64`` (UTC).
     3. Drop rows with missing magnitude (*mag*).
     4. Sort by *time* ascending.
 
@@ -127,12 +94,7 @@ def clean_catalog(df: pd.DataFrame) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 
-def deduplicate(
-    df: pd.DataFrame,
-    time_tol_sec: float = 2,
-    lat_tol: float = 0.05,
-    lon_tol: float = 0.05,
-) -> pd.DataFrame:
+def deduplicate(df, time_tol_sec=2, lat_tol=0.05, lon_tol=0.05):
     """Remove duplicate events reported by multiple networks.
 
     Events are grouped by rounding *time* (to the nearest ``time_tol_sec``
@@ -175,7 +137,9 @@ def deduplicate(
 
     # Within each group keep the row with the largest station count.
     df = df.sort_values("nst", ascending=False)
-    df = df.drop_duplicates(subset=["_time_grp", "_lat_grp", "_lon_grp"], keep="first")
+    df = df.drop_duplicates(
+        subset=["_time_grp", "_lat_grp", "_lon_grp"], keep="first"
+    )
 
     # Clean up helper columns and re-sort.
     df = df.drop(columns=["_time_grp", "_lat_grp", "_lon_grp"])
@@ -189,25 +153,23 @@ def deduplicate(
 # ---------------------------------------------------------------------------
 
 
-def estimate_mc(
-    magnitudes: np.ndarray | pd.Series,
-    method: str = "maxc",
-) -> float:
+def estimate_mc(magnitudes, method="maxc"):
     """Estimate magnitude of completeness.
+
+    Uses the maximum curvature method (Wiemer & Wyss 2000): the bin centre
+    of the most populated 0.1-unit magnitude bin, **plus 0.2**.
 
     Parameters
     ----------
     magnitudes : array-like
         Vector of earthquake magnitudes.
     method : str
-        Estimation method.  Currently only ``"maxc"`` (maximum curvature)
-        is supported.
+        Estimation method.  Currently only ``"maxc"`` is supported.
 
     Returns
     -------
     float
-        Estimated magnitude of completeness (bin centre of the most
-        populated 0.1-unit magnitude bin).
+        Estimated magnitude of completeness.
 
     Raises
     ------
@@ -220,6 +182,9 @@ def estimate_mc(
     magnitudes = np.asarray(magnitudes, dtype=float)
     magnitudes = magnitudes[~np.isnan(magnitudes)]
 
+    if len(magnitudes) == 0:
+        return 0.0
+
     # Build frequency-magnitude distribution with 0.1-unit bins.
     bin_min = np.floor(magnitudes.min() * 10) / 10
     bin_max = np.ceil(magnitudes.max() * 10) / 10
@@ -227,78 +192,52 @@ def estimate_mc(
 
     counts, edges = np.histogram(magnitudes, bins=bins)
 
+    if len(counts) == 0 or counts.sum() == 0:
+        return float(np.round(magnitudes.min() + 0.2, 1))
+
     # Bin centres.
     centres = (edges[:-1] + edges[1:]) / 2
 
-    # MAXC: the centre of the bin with the maximum count.
-    mc = centres[np.argmax(counts)]
+    # MAXC: the centre of the bin with the maximum count + 0.2.
+    mc = centres[np.argmax(counts)] + 0.2
     return float(np.round(mc, 1))
 
 
 # ---------------------------------------------------------------------------
-# Processing pipelines
+# Temporal gap detection
 # ---------------------------------------------------------------------------
 
 
-def process_region(raw_dir: str | Path, output_path: str | Path) -> pd.DataFrame:
-    """Load raw CSVs for a region, clean, deduplicate, and save as Parquet.
+def identify_temporal_gaps(df, threshold_hours=24):
+    """Identify temporal gaps in the catalog that exceed a threshold.
 
     Parameters
     ----------
-    raw_dir : str or Path
-        Directory containing raw CSV files for a single region.
-    output_path : str or Path
-        Destination Parquet file path.
+    df : pd.DataFrame
+        Catalog with a ``time`` column (datetime).
+    threshold_hours : float
+        Minimum gap duration in hours to report (default 24).
 
     Returns
     -------
     pd.DataFrame
-        The processed catalog.
+        Columns: ``gap_start``, ``gap_end``, ``gap_hours``.
+        One row per gap exceeding the threshold.
     """
-    output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    times = pd.to_datetime(df["time"]).sort_values().values
+    deltas = np.diff(times).astype("timedelta64[s]").astype(float) / 3600.0
 
-    df = load_raw_csvs(raw_dir)
-    df = clean_catalog(df)
-    df = deduplicate(df)
-    df.to_parquet(output_path, index=False)
+    mask = deltas > threshold_hours
+    if not mask.any():
+        return pd.DataFrame(columns=["gap_start", "gap_end", "gap_hours"])
 
-    return df
+    indices = np.where(mask)[0]
+    gaps = []
+    for i in indices:
+        gaps.append({
+            "gap_start": pd.Timestamp(times[i]),
+            "gap_end": pd.Timestamp(times[i + 1]),
+            "gap_hours": deltas[i],
+        })
 
-
-def process_all_regions(base_dir: str | Path = "data") -> dict[str, pd.DataFrame]:
-    """Process all four regions from raw CSVs to processed Parquet files.
-
-    Expected directory layout::
-
-        <base_dir>/
-            raw/
-                oklahoma/   *.csv
-                permian/    *.csv
-                socal/      *.csv
-                global/     *.csv
-            processed/
-                oklahoma.parquet
-                permian.parquet
-                socal.parquet
-                global.parquet
-
-    Parameters
-    ----------
-    base_dir : str or Path
-        Root data directory (default ``"data"``).
-
-    Returns
-    -------
-    dict[str, pd.DataFrame]
-        Mapping of region name to its processed catalog dataframe.
-    """
-    base_dir = Path(base_dir)
-    results: dict[str, pd.DataFrame] = {}
-
-    for region in REGION_BOUNDS:
-        raw_dir = base_dir / "raw" / region
-        output_path = base_dir / "processed" / f"{region}.parquet"
-        results[region] = process_region(raw_dir, output_path)
-
-    return results
+    return pd.DataFrame(gaps)

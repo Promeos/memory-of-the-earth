@@ -336,3 +336,152 @@ def ks_test_magnitudes(mags1, mags2, mc):
 
     result = stats.ks_2samp(m1, m2)
     return result.statistic, result.pvalue
+
+
+# ---------------------------------------------------------------------------
+# Spatial gridding helpers
+# ---------------------------------------------------------------------------
+
+def compute_bvalue_grid(df, cell_size=2.0, min_events=50, delta_m=0.1):
+    """Compute b-values on a spatial grid.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Catalog with ``latitude``, ``longitude``, and ``mag`` columns.
+        Should already be cleaned and filtered.
+    cell_size : float
+        Grid cell size in degrees (default 2.0).
+    min_events : int
+        Minimum number of events above Mc for a valid b-estimate
+        (default 50).
+    delta_m : float
+        Magnitude bin width (default 0.1).
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per cell with columns: ``cell_lat``, ``cell_lon``,
+        ``b_value``, ``b_std``, ``mc``, ``n_events``.
+    """
+    from .spatial import assign_cells
+    from .catalog import estimate_mc as _estimate_mc
+
+    df = assign_cells(df, cell_size=cell_size)
+
+    rows = []
+    for (clat, clon), grp in df.groupby(["cell_lat", "cell_lon"]):
+        mags = grp["mag"].values
+        mc = _estimate_mc(mags)
+        above = mags[mags >= mc]
+        n = len(above)
+
+        if n < min_events:
+            continue
+
+        try:
+            b, b_std = estimate_b_value(mags, mc, delta_m)
+        except ValueError:
+            continue
+
+        rows.append({
+            "cell_lat": clat,
+            "cell_lon": clon,
+            "b_value": b,
+            "b_std": b_std,
+            "mc": mc,
+            "n_events": n,
+        })
+
+    return pd.DataFrame(rows)
+
+
+def compute_cv_b(df, cell_size=2.0, window_years=3, stride_years=1,
+                 min_events_per_window=50, min_events_total=200,
+                 delta_m=0.1):
+    """Compute the temporal coefficient of variation of b (CV_b) per cell.
+
+    For each cell with enough data, computes b in rolling time windows
+    and returns CV_b = std(b_windows) / mean(b_windows).
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Catalog with ``latitude``, ``longitude``, ``mag``, and ``time``
+        columns.
+    cell_size : float
+        Grid cell size in degrees (default 2.0).
+    window_years : int
+        Width of each rolling window in years (default 3).
+    stride_years : int
+        Step between windows in years (default 1).
+    min_events_per_window : int
+        Minimum events above Mc per window (default 50).
+    min_events_total : int
+        Minimum total events in a cell to attempt CV_b (default 200).
+    delta_m : float
+        Magnitude bin width (default 0.1).
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per cell with columns: ``cell_lat``, ``cell_lon``,
+        ``cv_b``, ``mean_b``, ``std_b``, ``n_windows``.
+    """
+    from .spatial import assign_cells
+    from .catalog import estimate_mc as _estimate_mc
+
+    df = assign_cells(df, cell_size=cell_size)
+    df = df.copy()
+    df["time"] = pd.to_datetime(df["time"], utc=True)
+
+    rows = []
+    for (clat, clon), grp in df.groupby(["cell_lat", "cell_lon"]):
+        if len(grp) < min_events_total:
+            continue
+
+        mags = grp["mag"].values
+        mc = _estimate_mc(mags)
+
+        # Build rolling year windows
+        year_min = grp["time"].dt.year.min()
+        year_max = grp["time"].dt.year.max()
+
+        b_values = []
+        for y_start in range(year_min, year_max - window_years + 2,
+                             stride_years):
+            y_end = y_start + window_years
+            t_start = pd.Timestamp(f"{y_start}-01-01", tz="UTC")
+            t_end = pd.Timestamp(f"{y_end}-01-01", tz="UTC")
+
+            mask = (grp["time"] >= t_start) & (grp["time"] < t_end)
+            win_mags = grp.loc[mask, "mag"].values
+            above = win_mags[win_mags >= mc]
+
+            if len(above) < min_events_per_window:
+                continue
+
+            try:
+                b, _ = estimate_b_value(win_mags, mc, delta_m)
+                b_values.append(b)
+            except ValueError:
+                continue
+
+        if len(b_values) < 2:
+            continue
+
+        b_arr = np.array(b_values)
+        mean_b = np.mean(b_arr)
+        std_b = np.std(b_arr, ddof=1)
+        cv_b = std_b / mean_b if mean_b > 0 else np.nan
+
+        rows.append({
+            "cell_lat": clat,
+            "cell_lon": clon,
+            "cv_b": cv_b,
+            "mean_b": mean_b,
+            "std_b": std_b,
+            "n_windows": len(b_values),
+        })
+
+    return pd.DataFrame(rows)

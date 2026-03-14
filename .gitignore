@@ -1,12 +1,12 @@
 # Data files (too large for git)
 data/raw/
 data/processed/
+data/earthquake_catalog_*.csv
 *.parquet
-*.csv
 
 # Keep directory structure
-!data/raw/.gitkeep
-!data/processed/.gitkeep
+!data/.gitkeep
+!figures/.gitkeep
 
 # Python
 __pycache__/

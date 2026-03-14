@@ -1,5 +1,4 @@
-"""
-USGS ComCat earthquake API client with pagination and resume support.
+"""USGS ComCat earthquake API client with pagination and resume support.
 
 Fetches earthquake catalogs from the USGS ComCat FDSN Event Web Service,
 supporting monthly pagination, retry logic with exponential backoff,
@@ -28,18 +27,6 @@ REGIONS = {
         "years": range(2000, 2026),
         "lat_range": (33.5, 37.5),
         "lon_range": (-100.0, -94.5),
-    },
-    "permian_basin": {
-        "min_mag": 1.0,
-        "years": range(2010, 2026),
-        "lat_range": (30.5, 33.5),
-        "lon_range": (-105.0, -100.5),
-    },
-    "southern_california": {
-        "min_mag": 1.0,
-        "years": range(2000, 2026),
-        "lat_range": (32.0, 36.5),
-        "lon_range": (-121.0, -114.5),
     },
 }
 
@@ -93,11 +80,12 @@ def fetch_month(year, month, min_magnitude=2.5, lat_range=None, lon_range=None):
     return df
 
 
-def fetch_region(name, years, min_mag, lat_range=None, lon_range=None, output_dir=None):
+def fetch_region(name, years, min_mag, lat_range=None, lon_range=None,
+                 output_dir=None):
     """Fetch a full regional earthquake catalog with retry logic.
 
     Iterates over every month in the given year range, fetching CSV data
-    from USGS ComCat. Uses 3 retry attempts with exponential backoff on
+    from USGS ComCat.  Uses 3 retry attempts with exponential backoff on
     failure and a 0.5-second pause between successive requests.
 
     If ``output_dir`` is provided, each monthly CSV is saved to disk and
@@ -116,7 +104,7 @@ def fetch_region(name, years, min_mag, lat_range=None, lon_range=None, output_di
     lon_range : tuple of (float, float) or None, optional
         Longitude bounding box as (min_lon, max_lon).
     output_dir : str or Path or None, optional
-        Directory for saving raw monthly CSVs. If ``None``, data is
+        Directory for saving raw monthly CSVs.  If ``None``, data is
         returned in memory only.
 
     Returns
@@ -164,7 +152,10 @@ def fetch_region(name, years, min_mag, lat_range=None, lon_range=None, output_di
                     if attempt < max_retries:
                         time.sleep(wait)
                     else:
-                        print(f"[error] {label} — giving up after {max_retries} attempts")
+                        print(
+                            f"[error] {label} — giving up after "
+                            f"{max_retries} attempts"
+                        )
 
             if df is not None:
                 print(f"[ok]   {label} — {len(df)} events")
@@ -185,13 +176,13 @@ def fetch_all_regions(base_dir="data/raw"):
     """Fetch earthquake catalogs for all predefined regions.
 
     Convenience wrapper around :func:`fetch_region` that iterates over
-    four standard study regions (Global, Oklahoma, Permian Basin, and
-    Southern California) and saves raw CSVs under ``base_dir``.
+    the standard study regions (Global M2.5+ and Oklahoma M1.0+) and
+    saves raw CSVs under ``base_dir``.
 
     Parameters
     ----------
     base_dir : str or Path, optional
-        Root directory for raw CSV output. Each region gets its own
+        Root directory for raw CSV output.  Each region gets its own
         subdirectory (default ``"data/raw"``).
 
     Returns

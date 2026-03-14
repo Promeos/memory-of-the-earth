@@ -1,51 +1,50 @@
-# Seismic Fingerprints - Project Guide
+# The Memory of the Earth - Project Guide
 
 ## Overview
-Data science project detecting statistical signatures of human-caused earthquakes in 25 years of USGS data. Compares Oklahoma (induced seismicity ground truth), Southern California (tectonic control), and the Permian Basin (prospective test region).
+Data science project quantifying temporal structure and stress dynamics in 25 years of global seismicity using the USGS ANSS Comprehensive Earthquake Catalog (ComCat), 2000–2025.
 
 ## Tech Stack
 - Python 3.10+
-- Core: pandas, numpy, scipy, scikit-learn, matplotlib, seaborn, networkx
+- Core: pandas, numpy, scipy, scikit-learn, matplotlib, seaborn
 - Data: USGS ComCat API (CSV format, paginated monthly)
-- Storage: Raw CSVs in data/raw/, processed Parquet in data/processed/
+- Storage: Raw CSVs in data/raw/, analysis-ready CSVs in data/
 
 ## Project Structure
-- `src/` — Shared library modules (fetch, catalog, analysis, plotting)
-- `notebooks/` — 5 Jupyter notebooks (00-04), each self-contained
+- `src/` — 8 shared library modules (fetch, catalog, gutenberg_richter, interevent, entropy, omori, spatial, plotting)
+- `00_data_acquisition.py` — Standalone data fetch/clean script (run first)
+- `01–05_*.ipynb` — 5 analysis notebooks in project root, each self-contained
 - `data/raw/` — Raw monthly CSV pulls from USGS API
-- `data/processed/` — Cleaned Parquet files per region
+- `data/` — Cleaned catalog CSVs (earthquake_catalog_global.csv, earthquake_catalog_oklahoma.csv)
 - `figures/` — Publication-quality PNG outputs (300 DPI)
 
 ## Conventions
 
-### Region Colors (use consistently everywhere)
-- Oklahoma: `#E63946` (red)
-- Permian Basin: `#F4A261` (amber/orange)
-- Southern California: `#457B9D` (steel blue)
-- Global/other: `#2A9D8F` (teal)
+### Color Palette
+- Oklahoma / alerts: `#E63946` (red)
+- Teal / global: `#2A9D8F`
+- Steel blue: `#457B9D`
+- Amber: `#F4A261`
+- Gray: `#AAAAAA`
 
 ### Visualization Standards
 - 300 DPI, default `figsize=(12, 7)`
-- Use `plt.style.use('seaborn-v0_8-whitegrid')`
+- Use `seaborn-v0_8-whitegrid` style (with fallback)
 - Always label axes with units
-- Save figures to both `figures/` and display inline
+- Save figures to `figures/` and display inline
 
 ### Data Quality Rules
-- Always estimate Mc (magnitude of completeness) per region-year using MAXC method
+- Always estimate Mc per region using MAXC method (+0.2 correction, Wiemer & Wyss 2000)
 - Only analyze events above Mc
 - Filter to `type == "earthquake"` (exclude quarry blasts, explosions)
 - Deduplicate: group by (time ± 2s, lat ± 0.05°, lon ± 0.05°)
-- Use conservative common Mc for cross-region comparisons (M2.5 or M3.0)
 
 ### Regional Bounding Boxes
 - Oklahoma: lat 33.5–37.5°N, lon 100.0–94.5°W, min mag 1.0
-- Permian Basin: lat 30.5–33.5°N, lon 105.0–100.5°W, min mag 1.0
-- Southern California: lat 32.0–36.5°N, lon 121.0–114.5°W, min mag 1.0
 - Global: no bounds, min mag 2.5
 
 ## Running
 ```bash
 pip install -r requirements.txt
-# Notebooks should be run in order: 00 → 01 → 02 → 03 → 04
-# Notebook 00 fetches data from USGS API (takes ~30-60 min)
+python 00_data_acquisition.py  # Fetches/cleans data (~30-60 min if no cache)
+jupyter notebook 01_bvalue_stability_atlas.ipynb  # Then run notebooks 01-05
 ```

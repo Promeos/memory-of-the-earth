@@ -1,9 +1,8 @@
-"""
-Consistent visualization utilities for the seismic fingerprints project.
+"""Shared visualization utilities for the Memory of the Earth project.
 
-Provides region-aware color schemes, styled figures, and specialized plots
-for b-value analysis, phase portraits, magnitude-frequency distributions,
-inter-event statistics, cascade trees, and early-warning timelines.
+Provides consistent styling, figure saving, and specialized plot functions
+for global maps, recovery curves, regime classification maps, Oklahoma
+timelines, and entropy time series.
 """
 
 import warnings
@@ -12,26 +11,13 @@ from pathlib import Path
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
+import matplotlib.colors as mcolors
 import numpy as np
-import networkx as nx
+
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-
-REGION_COLORS = {
-    "oklahoma": "#E63946",
-    "permian": "#F4A261",
-    "socal": "#457B9D",
-    "global": "#2A9D8F",
-}
-
-REGION_LABELS = {
-    "oklahoma": "Oklahoma",
-    "permian": "Permian Basin",
-    "socal": "Southern California",
-    "global": "Global",
-}
 
 DEFAULT_FIGSIZE = (12, 7)
 DEFAULT_DPI = 300
@@ -46,8 +32,7 @@ def setup_style():
 
     Tries ``seaborn-v0_8-whitegrid`` first (matplotlib >= 3.6), then falls
     back to ``seaborn-whitegrid`` (older matplotlib), and finally uses the
-    default style.  Additionally sets default figure size, DPI, and font
-    sizes for titles, axes labels, and tick labels.
+    default style.
     """
     style_applied = False
     for style_name in ("seaborn-v0_8-whitegrid", "seaborn-whitegrid"):
@@ -104,21 +89,32 @@ def save_figure(fig, name, figures_dir="figures"):
 
 
 # ---------------------------------------------------------------------------
-# Plot functions
+# Global map plots
 # ---------------------------------------------------------------------------
 
-def plot_bvalue_timeseries(rolling_df, region, changepoints=None, ax=None):
-    """Plot b-value over time with optional changepoint markers.
+def plot_global_map(lats, lons, values, cmap="RdYlBu_r", vmin=None,
+                    vmax=None, label="", title="", cell_size=2.0, ax=None):
+    """Plot values on a global map using a scatter-style grid.
 
     Parameters
     ----------
-    rolling_df : pandas.DataFrame
-        Must contain columns ``time`` (or a datetime index) and ``b_value``.
-    region : str
-        Key into ``REGION_COLORS`` / ``REGION_LABELS``.
-    changepoints : list of datetime-like, optional
-        Times at which to draw vertical dashed lines.
-    ax : matplotlib.axes.Axes, optional
+    lats : array-like
+        Cell centre latitudes.
+    lons : array-like
+        Cell centre longitudes.
+    values : array-like
+        Values to plot (one per cell).
+    cmap : str
+        Matplotlib colormap name.
+    vmin, vmax : float or None
+        Color scale limits.
+    label : str
+        Colorbar label.
+    title : str
+        Figure title.
+    cell_size : float
+        Grid cell size in degrees (for marker sizing).
+    ax : matplotlib.axes.Axes or None
         Axes to draw on.  A new figure is created when *None*.
 
     Returns
@@ -126,333 +122,297 @@ def plot_bvalue_timeseries(rolling_df, region, changepoints=None, ax=None):
     matplotlib.axes.Axes
     """
     if ax is None:
-        _, ax = plt.subplots(figsize=DEFAULT_FIGSIZE)
+        fig, ax = plt.subplots(figsize=(14, 7))
 
-    color = REGION_COLORS.get(region, "#333333")
-    label = REGION_LABELS.get(region, region)
+    lats = np.asarray(lats)
+    lons = np.asarray(lons)
+    values = np.asarray(values)
 
-    time = rolling_df.index if "time" not in rolling_df.columns else rolling_df["time"]
-    ax.plot(time, rolling_df["b_value"], color=color, linewidth=1.5, label=label)
+    sc = ax.scatter(
+        lons, lats, c=values, cmap=cmap, vmin=vmin, vmax=vmax,
+        s=8, marker="s", edgecolors="none", alpha=0.85,
+    )
 
-    if changepoints is not None:
-        for cp in changepoints:
-            ax.axvline(cp, color="grey", linestyle="--", alpha=0.7, linewidth=1)
+    cbar = plt.colorbar(sc, ax=ax, pad=0.02, shrink=0.7)
+    cbar.set_label(label)
 
-    ax.set_xlabel("Time")
-    ax.set_ylabel("b-value")
-    ax.set_title(f"b-value Time Series — {label}")
-    ax.legend()
+    ax.set_xlim(-180, 180)
+    ax.set_ylim(-90, 90)
+    ax.set_xlabel("Longitude (°)")
+    ax.set_ylabel("Latitude (°)")
+    ax.set_title(title)
+    ax.set_aspect("equal")
+
     return ax
 
 
-def plot_bvalue_phase_portrait(rolling_dfs, regions, ax=None):
-    """Plot b-value vs log10(rate) phase portrait for one or more regions.
+def plot_bvalue_volatility_map(lats, lons, cv_values, ax=None):
+    """Plot global b-value volatility (CV_b) map.
 
-    This is the signature visualization of the project: each region traces
-    a parametric curve in (log10 rate, b-value) space, color-coded by time
-    using the *viridis* colormap, with arrows indicating the direction of
-    temporal evolution.
+    Green (stable) → Yellow → Red (volatile).
 
     Parameters
     ----------
-    rolling_dfs : list of pandas.DataFrame
-        Each DataFrame must contain ``b_value`` and ``rate`` columns (and a
-        datetime index or ``time`` column for ordering).
-    regions : list of str
-        Region keys corresponding to each DataFrame.
-    ax : matplotlib.axes.Axes, optional
+    lats, lons : array-like
+        Cell centre coordinates.
+    cv_values : array-like
+        CV_b values per cell.
+    ax : matplotlib.axes.Axes or None
 
     Returns
     -------
     matplotlib.axes.Axes
     """
-    if ax is None:
-        _, ax = plt.subplots(figsize=DEFAULT_FIGSIZE)
+    return plot_global_map(
+        lats, lons, cv_values,
+        cmap="RdYlGn_r", vmin=0, vmax=0.2,
+        label="CV_b (b-value volatility)",
+        title="Global b-value Temporal Volatility",
+        ax=ax,
+    )
 
-    cmap = cm.viridis
 
-    for df, region in zip(rolling_dfs, regions):
-        b = df["b_value"].values
-        rate = df["rate"].values
-        log_rate = np.log10(rate + 1e-10)  # avoid log(0)
-        n = len(b)
-        if n < 2:
+# ---------------------------------------------------------------------------
+# Recovery curves
+# ---------------------------------------------------------------------------
+
+def plot_recovery_gallery(recovery_data, n_rows=3, n_cols=3):
+    """Plot a gallery of b-value and rate recovery curves.
+
+    Parameters
+    ----------
+    recovery_data : list of dict
+        Each dict should have keys ``name``, ``t_days``, ``b_values``,
+        ``b_baseline``, ``rates`` (optional).
+    n_rows, n_cols : int
+        Grid layout.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    """
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows))
+    axes_flat = axes.flatten()
+
+    for i, ax in enumerate(axes_flat):
+        if i >= len(recovery_data):
+            ax.set_visible(False)
             continue
 
-        # Normalise time index to [0, 1] for colormap
-        t_norm = np.linspace(0, 1, n)
+        rd = recovery_data[i]
+        ax.plot(rd["t_days"], rd["b_values"], "b-", linewidth=1.5,
+                label="b(t)")
+        ax.axhline(rd["b_baseline"], color="gray", linestyle="--",
+                   linewidth=1, label="baseline")
+        ax.set_title(rd["name"], fontsize=11)
+        ax.set_xlabel("Days after mainshock")
+        ax.set_ylabel("b-value")
+        ax.legend(fontsize=8)
 
-        # Draw coloured line segments
-        for i in range(n - 1):
-            ax.plot(
-                log_rate[i : i + 2],
-                b[i : i + 2],
-                color=cmap(t_norm[i]),
-                linewidth=1.5,
-                alpha=0.8,
-            )
-
-        # Add arrows at regular intervals to show direction
-        arrow_step = max(1, n // 8)
-        for i in range(0, n - 1, arrow_step):
-            dx = log_rate[i + 1] - log_rate[i]
-            dy = b[i + 1] - b[i]
-            ax.annotate(
-                "",
-                xy=(log_rate[i + 1], b[i + 1]),
-                xytext=(log_rate[i], b[i]),
-                arrowprops=dict(
-                    arrowstyle="->",
-                    color=cmap(t_norm[i]),
-                    lw=1.5,
-                ),
-            )
-
-        # Region label at the start of the trajectory
-        label = REGION_LABELS.get(region, region)
-        ax.annotate(
-            label,
-            xy=(log_rate[0], b[0]),
-            fontsize=9,
-            fontweight="bold",
-            color=REGION_COLORS.get(region, "#333333"),
-        )
-
-    # Colorbar for time
-    sm = cm.ScalarMappable(cmap=cmap, norm=matplotlib.colors.Normalize(0, 1))
-    sm.set_array([])
-    cbar = plt.colorbar(sm, ax=ax, pad=0.02)
-    cbar.set_label("Relative Time (early → late)")
-
-    ax.set_xlabel("log₁₀(Seismicity Rate)")
-    ax.set_ylabel("b-value")
-    ax.set_title("b-value Phase Portrait")
-    return ax
+    fig.suptitle("Stress Recovery Curves", fontsize=14, fontweight="bold")
+    fig.tight_layout()
+    return fig
 
 
-def plot_magnitude_frequency(magnitudes, mc, region, ax=None):
-    """Gutenberg–Richter magnitude–frequency plot.
+# ---------------------------------------------------------------------------
+# Regime classification map
+# ---------------------------------------------------------------------------
 
-    Plots the cumulative number of events with magnitude >= M on a
-    log-scaled y-axis, marks the completeness magnitude *mc*, and overlays
-    the GR fit line above *mc*.
+def plot_regime_map(lats, lons, classes, ax=None):
+    """Plot global distributional class map.
+
+    Colors: Poisson-like = blue, Clustered-like = red,
+    Quasi-periodic-like = green, Ambiguous = gray.
 
     Parameters
     ----------
-    magnitudes : array-like
-        Event magnitudes.
-    mc : float
-        Completeness magnitude.
-    region : str
-        Region key for colours and labels.
-    ax : matplotlib.axes.Axes, optional
+    lats, lons : array-like
+        Cell centre coordinates.
+    classes : array-like of str
+        Regime class per cell.
+    ax : matplotlib.axes.Axes or None
 
     Returns
     -------
     matplotlib.axes.Axes
     """
     if ax is None:
-        _, ax = plt.subplots(figsize=DEFAULT_FIGSIZE)
+        fig, ax = plt.subplots(figsize=(14, 7))
 
-    magnitudes = np.asarray(magnitudes)
-    color = REGION_COLORS.get(region, "#333333")
-    label = REGION_LABELS.get(region, region)
+    color_map = {
+        "poisson": "#457B9D",
+        "clustered": "#E63946",
+        "quasi_periodic": "#2A9D8F",
+        "ambiguous": "#AAAAAA",
+    }
 
-    # Empirical cumulative distribution (exceedance)
-    m_sorted = np.sort(magnitudes)
-    n_exceed = np.arange(len(m_sorted), 0, -1)
-    ax.scatter(m_sorted, n_exceed, s=8, color=color, alpha=0.6, label=label)
-    ax.set_yscale("log")
+    colors = [color_map.get(c, "#AAAAAA") for c in classes]
 
-    # GR fit above Mc
-    above = magnitudes[magnitudes >= mc]
-    if len(above) > 1:
-        b_val = np.log10(np.e) / (np.mean(above) - mc)
-        a_val = np.log10(len(above)) + b_val * mc
-        m_fit = np.linspace(mc, magnitudes.max(), 50)
-        log_n_fit = a_val - b_val * m_fit
-        ax.plot(m_fit, 10 ** log_n_fit, "--", color=color, linewidth=2,
-                label=f"GR fit (b={b_val:.2f})")
+    ax.scatter(lons, lats, c=colors, s=8, marker="s",
+               edgecolors="none", alpha=0.85)
 
-    # Mark Mc
-    ax.axvline(mc, color="k", linestyle=":", linewidth=1, label=f"Mc = {mc:.1f}")
+    # Legend
+    from matplotlib.patches import Patch
+    legend_elements = [
+        Patch(facecolor="#457B9D", label="Poisson-like"),
+        Patch(facecolor="#E63946", label="Clustered-like"),
+        Patch(facecolor="#2A9D8F", label="Quasi-periodic-like"),
+        Patch(facecolor="#AAAAAA", label="Ambiguous"),
+    ]
+    ax.legend(handles=legend_elements, loc="lower left", fontsize=9)
 
-    ax.set_xlabel("Magnitude")
-    ax.set_ylabel("N (≥ M)")
-    ax.set_title(f"Magnitude–Frequency Distribution — {label}")
+    ax.set_xlim(-180, 180)
+    ax.set_ylim(-90, 90)
+    ax.set_xlabel("Longitude (°)")
+    ax.set_ylabel("Latitude (°)")
+    ax.set_title("Inter-Event Time Regime Classification")
+    ax.set_aspect("equal")
+
+    return ax
+
+
+# ---------------------------------------------------------------------------
+# Oklahoma timeline
+# ---------------------------------------------------------------------------
+
+def plot_oklahoma_timeline(monthly_counts, rolling_b, phase_boundaries,
+                           ax=None):
+    """Dual-axis Oklahoma seismicity timeline.
+
+    Parameters
+    ----------
+    monthly_counts : pd.DataFrame
+        Columns: ``month`` (datetime), ``count``.
+    rolling_b : pd.DataFrame
+        Columns: ``center_time`` (datetime), ``b_value``.
+    phase_boundaries : list of (datetime, str)
+        List of (date, label) pairs for phase boundary lines.
+    ax : matplotlib.axes.Axes or None
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+    """
+    if ax is None:
+        fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE)
+
+    # Bars for event count
+    ax.bar(monthly_counts["month"], monthly_counts["count"],
+           width=25, color="#E63946", alpha=0.6, label="Monthly events")
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Monthly event count", color="#E63946")
+    ax.tick_params(axis="y", labelcolor="#E63946")
+
+    # Secondary axis for b-value
+    ax2 = ax.twinx()
+    ax2.plot(rolling_b["center_time"], rolling_b["b_value"],
+             color="#457B9D", linewidth=1.5, label="b-value")
+    ax2.set_ylabel("b-value", color="#457B9D")
+    ax2.tick_params(axis="y", labelcolor="#457B9D")
+
+    # Phase boundaries
+    for date, label in phase_boundaries:
+        ax.axvline(date, color="black", linestyle="--", linewidth=1,
+                   alpha=0.5)
+        ax.text(date, ax.get_ylim()[1] * 0.95, f" {label}",
+                fontsize=8, ha="left", va="top", style="italic")
+
+    ax.set_title("Oklahoma Seismicity Timeline")
+
+    return ax
+
+
+# ---------------------------------------------------------------------------
+# Entropy time series
+# ---------------------------------------------------------------------------
+
+def plot_entropy_timeseries(entropy_df, large_events=None, anomalies=None,
+                            title="Shannon Entropy of Magnitude Distribution",
+                            ax=None):
+    """Plot entropy time series with optional event markers and anomalies.
+
+    Parameters
+    ----------
+    entropy_df : pd.DataFrame
+        Columns: ``center_time``, ``H``.
+    large_events : array-like of datetime or None
+        Times of large earthquakes to mark as vertical lines.
+    anomalies : pd.DataFrame or None
+        Entropy anomaly windows to shade.
+    title : str
+        Figure title.
+    ax : matplotlib.axes.Axes or None
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+    """
+    if ax is None:
+        fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE)
+
+    ax.plot(entropy_df["center_time"], entropy_df["H"],
+            color="#2A9D8F", linewidth=1, alpha=0.8)
+
+    if large_events is not None:
+        for t in large_events:
+            ax.axvline(t, color="#E63946", linewidth=0.8, alpha=0.5)
+
+    if anomalies is not None and len(anomalies) > 0:
+        ymin, ymax = ax.get_ylim()
+        for _, row in anomalies.iterrows():
+            ax.axvspan(row["center_time"],
+                       row["center_time"] + np.timedelta64(7, "D"),
+                       alpha=0.15, color="#F4A261")
+
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Shannon Entropy H (bits)")
+    ax.set_title(title)
+
+    return ax
+
+
+def plot_superposed_epoch(aligned_curves, null_mean=None, null_ci=None,
+                          ax=None):
+    """Superposed epoch analysis: average entropy around large events.
+
+    Parameters
+    ----------
+    aligned_curves : np.ndarray
+        Shape (n_events, n_timesteps).  Each row is an entropy curve
+        aligned at t=0 (the event time).
+    null_mean : np.ndarray or None
+        Mean of null-model curves (same length as n_timesteps).
+    null_ci : tuple of (np.ndarray, np.ndarray) or None
+        (lower, upper) 95% confidence band from null model.
+    ax : matplotlib.axes.Axes or None
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+    """
+    if ax is None:
+        fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE)
+
+    n_steps = aligned_curves.shape[1]
+    t_axis = np.linspace(-365, 365, n_steps)
+
+    mean_curve = np.nanmean(aligned_curves, axis=0)
+    ax.plot(t_axis, mean_curve, color="#2A9D8F", linewidth=2,
+            label="Observed mean")
+
+    if null_mean is not None:
+        ax.plot(t_axis, null_mean, color="gray", linewidth=1.5,
+                linestyle="--", label="Null model mean")
+
+    if null_ci is not None:
+        ax.fill_between(t_axis, null_ci[0], null_ci[1],
+                        alpha=0.15, color="gray", label="Null 95% CI")
+
+    ax.axvline(0, color="#E63946", linewidth=1.5, linestyle="-",
+               label="Event (t=0)")
+    ax.set_xlabel("Days relative to M7+ event")
+    ax.set_ylabel("Shannon Entropy H (bits)")
+    ax.set_title("Superposed Epoch Analysis")
     ax.legend()
-    return ax
 
-
-def plot_interevent_panel(results_dict, ax=None):
-    """Panel comparing inter-event time statistics across regions.
-
-    Displays coefficient of variation (CV), Hurst exponent (H), and
-    best-fit distribution name for each region as a grouped bar / text
-    summary.
-
-    Parameters
-    ----------
-    results_dict : dict
-        Maps region name (str) to a dict with keys ``cv`` (float),
-        ``H`` (float), and ``best_dist`` (str).
-    ax : matplotlib.axes.Axes, optional
-
-    Returns
-    -------
-    matplotlib.axes.Axes
-    """
-    if ax is None:
-        _, ax = plt.subplots(figsize=DEFAULT_FIGSIZE)
-
-    regions = list(results_dict.keys())
-    n = len(regions)
-    x = np.arange(n)
-    width = 0.35
-
-    cvs = [results_dict[r]["cv"] for r in regions]
-    hs = [results_dict[r]["H"] for r in regions]
-    dists = [results_dict[r]["best_dist"] for r in regions]
-    colors = [REGION_COLORS.get(r, "#333333") for r in regions]
-    labels = [REGION_LABELS.get(r, r) for r in regions]
-
-    bars_cv = ax.bar(x - width / 2, cvs, width, label="CV", color=colors, alpha=0.8)
-    bars_h = ax.bar(x + width / 2, hs, width, label="Hurst H", color=colors, alpha=0.5)
-
-    # Annotate best-fit distribution names above bars
-    for i, dist_name in enumerate(dists):
-        ymax = max(cvs[i], hs[i])
-        ax.text(x[i], ymax + 0.05, dist_name, ha="center", fontsize=9,
-                fontstyle="italic")
-
-    ax.set_xticks(x)
-    ax.set_xticklabels(labels)
-    ax.set_ylabel("Value")
-    ax.set_title("Inter-event Time Statistics by Region")
-    ax.legend()
-    return ax
-
-
-def plot_cascade_tree(cascade_df, catalog_df, ax=None):
-    """Visualise a single aftershock cascade as a directed graph.
-
-    Node size is proportional to event magnitude; edges are coloured by
-    the log10 of the time delay between parent and child events.
-
-    Parameters
-    ----------
-    cascade_df : pandas.DataFrame
-        Must contain ``parent_id`` and ``child_id`` columns identifying
-        event pairs, plus a ``delay`` column (time delay in seconds or
-        days).
-    catalog_df : pandas.DataFrame
-        Full catalogue with an ``id`` column and a ``magnitude`` column.
-    ax : matplotlib.axes.Axes, optional
-
-    Returns
-    -------
-    matplotlib.axes.Axes
-    """
-    if ax is None:
-        _, ax = plt.subplots(figsize=DEFAULT_FIGSIZE)
-
-    G = nx.DiGraph()
-
-    # Build magnitude lookup
-    mag_lookup = {}
-    if "id" in catalog_df.columns and "magnitude" in catalog_df.columns:
-        mag_lookup = dict(zip(catalog_df["id"], catalog_df["magnitude"]))
-
-    # Add edges
-    delays = []
-    for _, row in cascade_df.iterrows():
-        parent = row["parent_id"]
-        child = row["child_id"]
-        delay = row.get("delay", 1.0)
-        G.add_edge(parent, child, delay=delay)
-        delays.append(delay)
-
-    if len(G) == 0:
-        ax.text(0.5, 0.5, "Empty cascade", ha="center", va="center",
-                transform=ax.transAxes)
-        return ax
-
-    # Node sizes proportional to magnitude
-    node_sizes = []
-    for node in G.nodes():
-        mag = mag_lookup.get(node, 2.0)
-        node_sizes.append(30 * (10 ** (mag - 1)))  # scale for visibility
-
-    # Layout
-    try:
-        pos = nx.nx_agraph.graphviz_layout(G, prog="dot")
-    except Exception:
-        pos = nx.spring_layout(G, seed=42)
-
-    # Edge colours by log10(delay)
-    edge_delays = [G[u][v]["delay"] for u, v in G.edges()]
-    log_delays = np.log10(np.array(edge_delays, dtype=float) + 1e-10)
-    norm = matplotlib.colors.Normalize(vmin=log_delays.min(), vmax=log_delays.max())
-    edge_colors = [cm.plasma(norm(ld)) for ld in log_delays]
-
-    nx.draw_networkx_nodes(G, pos, ax=ax, node_size=node_sizes,
-                           node_color="#457B9D", alpha=0.8)
-    nx.draw_networkx_edges(G, pos, ax=ax, edge_color=edge_colors,
-                           width=1.5, arrows=True, arrowsize=12)
-
-    # Colorbar for delay
-    sm = cm.ScalarMappable(cmap=cm.plasma, norm=norm)
-    sm.set_array([])
-    cbar = plt.colorbar(sm, ax=ax, pad=0.02)
-    cbar.set_label("log₁₀(Time Delay)")
-
-    ax.set_title("Aftershock Cascade Tree")
-    ax.axis("off")
-    return ax
-
-
-def plot_early_warning_timeline(permian_probs, oklahoma_probs,
-                                years_permian, years_oklahoma, ax=None):
-    """Timeline of induced-seismicity probability for two regions.
-
-    Parameters
-    ----------
-    permian_probs : array-like
-        Probability of induced origin for the Permian Basin over time.
-    oklahoma_probs : array-like
-        Probability of induced origin for Oklahoma over time.
-    years_permian : array-like
-        Year (or datetime) values corresponding to *permian_probs*.
-    years_oklahoma : array-like
-        Year (or datetime) values corresponding to *oklahoma_probs*.
-    ax : matplotlib.axes.Axes, optional
-
-    Returns
-    -------
-    matplotlib.axes.Axes
-    """
-    if ax is None:
-        _, ax = plt.subplots(figsize=DEFAULT_FIGSIZE)
-
-    ax.plot(years_permian, permian_probs,
-            color=REGION_COLORS["permian"], linewidth=2,
-            label=REGION_LABELS["permian"], marker="o", markersize=4)
-    ax.plot(years_oklahoma, oklahoma_probs,
-            color=REGION_COLORS["oklahoma"], linewidth=2,
-            label=REGION_LABELS["oklahoma"], marker="s", markersize=4)
-
-    # Reference threshold line
-    ax.axhline(0.5, color="grey", linestyle="--", linewidth=1, alpha=0.6,
-               label="p = 0.5 threshold")
-
-    ax.fill_between(years_permian, permian_probs, alpha=0.15,
-                     color=REGION_COLORS["permian"])
-    ax.fill_between(years_oklahoma, oklahoma_probs, alpha=0.15,
-                     color=REGION_COLORS["oklahoma"])
-
-    ax.set_ylim(-0.05, 1.05)
-    ax.set_xlabel("Year")
-    ax.set_ylabel("P(induced)")
-    ax.set_title("Early-Warning Timeline: Induced Seismicity Probability")
-    ax.legend(loc="upper left")
     return ax
