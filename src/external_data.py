@@ -422,8 +422,14 @@ def load_heat_flow(filepath: str | Path = None, min_quality: str = None) -> pd.D
 
 
 def _load_hf_2024(filepath: Path, min_quality: str = None) -> pd.DataFrame:
-    """Parse the 2024 GHFDB release (tab-separated, coded P/C headers)."""
-    # Row 13 (0-indexed line 12) has real column names; data starts at row 14
+    """Parse the 2024 GHFDB release (tab-separated, coded P/C headers).
+
+    Parameters
+    ----------
+    min_quality : maximum acceptable U-score (1-4). E.g. min_quality="2"
+                  keeps only U1 and U2 (excellent+good uncertainty).
+                  Unscored entries (Ux) are excluded when filtering.
+    """
     with open(filepath, encoding="latin-1") as f:
         all_lines = f.readlines()
 
@@ -462,18 +468,28 @@ def _load_hf_2024(filepath: Path, min_quality: str = None) -> pd.DataFrame:
         elev = _safe_float(row.get("elevation", ""))
         env = row.get("environment", "").strip()
         q_method = row.get("q_method", "").strip()
-        quality = _safe_float(row.get("Quality_Score_Parent", ""))
+
+        # Parse coded quality string instead of treating as numeric
+        qs_raw = row.get("Quality_Score_Parent", "").strip()
+        parsed_q = parse_ghfdb_quality(qs_raw)
 
         records.append({
             "lat": lat, "lon": lon,
             "q_mw_m2": q, "q_uncertainty": q_unc,
             "elevation": elev, "environment": env,
-            "q_method": q_method, "quality_score": quality,
+            "q_method": q_method,
+            "quality_string": qs_raw,
+            "u_score": parsed_q["u_score"],
+            "m_score": parsed_q["m_score"],
         })
 
     df = pd.DataFrame(records)
-    if min_quality is not None and "quality_score" in df.columns:
-        df = df[df["quality_score"] <= float(min_quality)].reset_index(drop=True)
+
+    # Quality filtering: keep only entries with U-score <= threshold
+    if min_quality is not None:
+        max_u = int(min_quality)
+        df = df[df["u_score"].notna() & (df["u_score"] <= max_u)].reset_index(drop=True)
+
     return df
 
 
@@ -530,6 +546,47 @@ def resample_heat_flow_to_grid(hf_df: pd.DataFrame, grid_size: float = 2.0) -> p
         n_measurements=("q_mw_m2", "count"),
     ).reset_index()
     return grouped
+
+
+def parse_ghfdb_quality(qs: str) -> dict:
+    """Parse a GHFDB quality score string (e.g. 'U1.M2.xeTxXcx') into components.
+
+    Returns dict with keys:
+        u_score: int (1-4) or None if unscored
+        m_score: int (1-4) or None if unscored
+        p_flags: dict of 7 perturbation flags (True/False/None)
+
+    Scoring per Fuchs et al. (2023), Tectonophysics 863:
+        U1=excellent (<5% COV), U2=good (5-15%), U3=fair (15-25%), U4=poor (>25%)
+        M1=excellent, M2=good, M3=fair, M4=poor (methodology quality)
+        P-flags: e=sedimentation, T=paleoclimate, x=topography, X=refraction,
+                 c=convection, S=in-situ heat production, -=not evaluated
+    """
+    result = {"u_score": None, "m_score": None, "p_flags": {}}
+    if not qs or not isinstance(qs, str):
+        return result
+
+    match = re.match(r"U([1234x])\.M([1234x])", qs)
+    if match:
+        u = match.group(1)
+        m = match.group(2)
+        result["u_score"] = int(u) if u != "x" else None
+        result["m_score"] = int(m) if m != "x" else None
+
+    # Parse the 7 perturbation flags after the second dot
+    parts = qs.split(".")
+    if len(parts) >= 3:
+        flags_str = parts[2]
+        flag_names = ["sedimentation", "paleoclimate", "topography",
+                      "refraction", "convection", "heat_production", "other"]
+        for i, name in enumerate(flag_names):
+            if i < len(flags_str):
+                c = flags_str[i]
+                result["p_flags"][name] = c != "-" and c != "x"
+            else:
+                result["p_flags"][name] = None
+
+    return result
 
 
 def _safe_float(s: str) -> float:
