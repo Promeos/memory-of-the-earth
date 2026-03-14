@@ -33,23 +33,28 @@ Each analysis stands on its own. Together, they produce a composite picture of h
 
 ### Global b-value Atlas (Notebook 1)
 ![Global b-value map](figures/01_global_bvalue_map.png)
-*Gutenberg-Richter b-value on a 2°×2° grid (709 cells, MLE, min 50 events). The canonical b ≈ 1.0 dominates, but systematic departures trace tectonic boundaries: subduction zones and spreading ridges run high (b > 1.1), stable continental interiors run low (b < 0.9).*
+
+Each colored square is a ~220 km patch of Earth. The color shows the **ratio of small earthquakes to big ones** in that area over 25 years. Red/warm (b > 1.0) means the crust releases stress in many small bursts — common at spreading ridges and volcanic zones. Blue/cool (b < 1.0) means a region produces proportionally more large events, suggesting higher stored stress — typical of stable continental interiors. Think of it like a piggy bank: blue regions save up and make big withdrawals, red regions make lots of small ones.
 
 ### Stress Recovery Clock (Notebook 2)
 ![Recovery gallery](figures/02_recovery_gallery.png)
-*Post-mainshock b-value recovery curves for 9 well-constrained M7+ sequences. Each panel tracks rolling b-value from rupture through ~1000 days. The exponential fits measure how long the Earth's statistical fingerprint takes to return to background — recovery timescales range from months to years.*
+
+Each of the 9 panels shows what happens to a region's earthquake statistics **after a major earthquake** (magnitude 7+). The x-axis is days since the big quake, the y-axis is the small-to-big earthquake ratio (b-value), and the dashed line is the "normal" baseline for that region. Right after a major earthquake, the ratio gets knocked away from normal as aftershocks change the mix of earthquake sizes. The curve shows how long it takes to **bounce back** — some regions recover in days, others take years. This is literally the "memory" in the project title: the Earth remembers the big quake, and we're measuring how long that memory lasts.
 
 ### Interevent Regime Classification (Notebook 3)
 ![Regime classification map](figures/03_regime_classification_map.png)
-*Every seismically active 2°×2° cell classified by its dominant interevent time distribution. The globe is overwhelmingly clustered (91% of cells) — true Poissonian seismicity is rare, confined to isolated intraplate and rift cells.*
+
+Each square is classified by **how earthquakes are spaced in time** in that region. Red (91% of cells) means earthquakes come in bursts — a big one triggers a swarm, then quiet, then another burst. Blue means earthquakes arrive randomly like raindrops, with no memory of the last one — this is extremely rare (1.7%). Gray means the statistics are ambiguous. The big takeaway: almost everywhere on Earth, earthquakes "remember" recent earthquakes. True randomness is the exception, not the rule.
 
 ### The Oklahoma Experiment (Notebook 4)
 ![Oklahoma timeline](figures/04_oklahoma_timeline.png)
-*Oklahoma's 15-year arc from tectonic quiescence through injection-driven seismicity explosion through partial recovery. Monthly M2.5+ counts (bars) overlaid with rolling b-value (line). The five phases — Baseline, Onset, Surge, Regulation, Recovery — trace a complete induced seismicity lifecycle.*
+
+The story of what happens when humans accidentally trigger earthquakes. Pink bars (left axis) show monthly earthquake counts; the blue line (right axis) shows the small-to-big ratio. Reading left to right: Oklahoma was seismically dead before 2009. Oil & gas wastewater injection ramped up, and earthquakes exploded — by 2015, Oklahoma had more earthquakes than California. State regulators forced injection cutbacks, and earthquakes declined but never returned to zero. The remaining quakes have a low b-value (below 1.0), meaning they're disproportionately larger — the crust hasn't fully healed.
 
 ### Seismic Entropy Index (Notebook 5)
 ![Global entropy time series](figures/05_global_entropy_timeseries.png)
-*Shannon entropy of the global magnitude distribution (90-day rolling window, 7-day stride). Red markers show M7+ events. Entropy drops indicate transient narrowing of the magnitude distribution — potential precursory signals, tested against a null model of shuffled magnitudes.*
+
+The teal line measures **how unpredictable the next earthquake's size will be**, calculated in a sliding 90-day window. High values (~2.5) mean earthquakes come in a healthy mix of sizes — small, medium, large. Low values (~2.0) mean the size distribution narrows and becomes more uniform. Each red vertical line marks a magnitude 7+ earthquake; orange bands mark the biggest events (M8+). The question: do the dips in the teal line tend to happen *before* large earthquakes? If the size distribution narrows right before a big event, that could be a statistical warning sign. The notebook tests this against a randomized baseline to check whether the pattern is real or coincidence.
 
 ---
 
