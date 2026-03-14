@@ -29,6 +29,30 @@ Each analysis stands on its own. Together, they produce a composite picture of h
 
 ---
 
+## Selected Figures
+
+### Global b-value Atlas (Notebook 1)
+![Global b-value map](figures/01_global_bvalue_map.png)
+*Gutenberg-Richter b-value on a 2°×2° grid (709 cells, MLE, min 50 events). The canonical b ≈ 1.0 dominates, but systematic departures trace tectonic boundaries: subduction zones and spreading ridges run high (b > 1.1), stable continental interiors run low (b < 0.9).*
+
+### Stress Recovery Clock (Notebook 2)
+![Recovery gallery](figures/02_recovery_gallery.png)
+*Post-mainshock b-value recovery curves for 9 well-constrained M7+ sequences. Each panel tracks rolling b-value from rupture through ~1000 days. The exponential fits measure how long the Earth's statistical fingerprint takes to return to background — recovery timescales range from months to years.*
+
+### Interevent Regime Classification (Notebook 3)
+![Regime classification map](figures/03_regime_classification_map.png)
+*Every seismically active 2°×2° cell classified by its dominant interevent time distribution. The globe is overwhelmingly clustered (91% of cells) — true Poissonian seismicity is rare, confined to isolated intraplate and rift cells.*
+
+### The Oklahoma Experiment (Notebook 4)
+![Oklahoma timeline](figures/04_oklahoma_timeline.png)
+*Oklahoma's 15-year arc from tectonic quiescence through injection-driven seismicity explosion through partial recovery. Monthly M2.5+ counts (bars) overlaid with rolling b-value (line). The five phases — Baseline, Onset, Surge, Regulation, Recovery — trace a complete induced seismicity lifecycle.*
+
+### Seismic Entropy Index (Notebook 5)
+![Global entropy time series](figures/05_global_entropy_timeseries.png)
+*Shannon entropy of the global magnitude distribution (90-day rolling window, 7-day stride). Red markers show M7+ events. Entropy drops indicate transient narrowing of the magnitude distribution — potential precursory signals, tested against a null model of shuffled magnitudes.*
+
+---
+
 ## Motivation
 
 The Gutenberg-Richter law and Omori aftershock decay are among the most robust empirical laws in geophysics. Both have been studied extensively. What motivates this project is not the individual techniques — all are well-established — but three gaps in how they've been applied:
@@ -58,7 +82,7 @@ We note that each of these claims about novelty reflects our understanding of th
 
 ### Query Specification
 
-- **Time range:** 2000-01-01 to 2025-06-01 (25.5 years)
+- **Time range:** 2000-01-01 to 2025-12-31 (26 years)
 - **Minimum magnitude:** 2.5 (practical acquisition threshold; not complete everywhere at this level — all downstream analyses are filtered by local Mc)
 - **Event type:** `earthquake` only (exclude blasts, quarry events)
 - **Fields used:** `time`, `latitude`, `longitude`, `depth`, `mag`, `magType`, `place`, `type`, `id`, `nst`, `gap`, `rms`
@@ -75,7 +99,7 @@ GET /fdsnws/event/1/query?format=csv
     &orderby=time-asc
 ```
 
-306 monthly queries, concatenated into a single catalog. Implement retry logic with exponential backoff (the API occasionally returns 503). Rate-limit requests to one every 0.5 seconds.
+312 monthly queries, concatenated into a single catalog. Implement retry logic with exponential backoff (the API occasionally returns 503). Rate-limit requests to one every 0.5 seconds.
 
 For the Oklahoma analysis (Notebook 4), pull a separate regional catalog at M1.0+ for the bounding box (33.5°N–37.5°N, 100.0°W–94.5°W) to capture the full induced seismicity sequence including small events.
 
@@ -117,7 +141,7 @@ The following external datasets were integrated to enrich the analysis:
 **Purpose:** Fetch, concatenate, validate, and clean the earthquake catalog.
 
 **Steps:**
-1. Loop over months from 2000-01 to 2025-06. For each month, query the USGS CSV endpoint.
+1. Loop over months from 2000-01 to 2025-12. For each month, query the USGS CSV endpoint.
 2. Concatenate all monthly CSVs into a single DataFrame.
 3. Parse the `time` column to UTC datetime. Sort by time.
 4. Remove non-earthquake events (filter on `type` column).

@@ -10,7 +10,7 @@ Data science project quantifying temporal structure and stress dynamics in 25 ye
 - Storage: Raw CSVs in data/raw/, analysis-ready CSVs in data/
 
 ## Project Structure
-- `src/` — 8 shared library modules (fetch, catalog, gutenberg_richter, interevent, entropy, omori, spatial, plotting)
+- `src/` — 9 shared library modules (fetch, catalog, gutenberg_richter, interevent, entropy, omori, spatial, plotting, external_data)
 - `00_data_acquisition.py` — Standalone data fetch/clean script (run first)
 - `01–05_*.ipynb` — 5 analysis notebooks in project root, each self-contained
 - `data/raw/` — Raw monthly CSV pulls from USGS API
