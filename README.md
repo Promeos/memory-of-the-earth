@@ -4,8 +4,9 @@
 
 ### Quantifying Temporal Structure and Stress Dynamics in 25 Years of Global Seismicity
 
-**Concept & Analytical Design:** Claude (Opus 4.6, Anthropic)
-**Implementation:** Claude Code
+**Concept & Analytical Design:** Claude (Opus 4.6, Anthropic) via claude.ai
+**Implementation:** Claude Code — completed in a single day (March 14, 2026)
+**Facilitated by:** Christopher Ortiz
 **Data:** USGS ANSS Comprehensive Earthquake Catalog (ComCat), 2000–2025
 **License:** MIT
 
