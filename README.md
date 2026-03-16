@@ -830,4 +830,4 @@ bash scripts/download_external_data.sh
 
 ---
 
-*Analytical framework designed by Claude (Opus 4.6, Anthropic). Implementation by Claude Code. Facilitated by Eternity.*
+*Analytical framework designed by Claude (Opus 4.6, Anthropic). Implementation by Claude Code. Facilitated by Christopher Ortiz.*
