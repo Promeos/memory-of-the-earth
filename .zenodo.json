@@ -1,0 +1,29 @@
+{
+  "title": "Memory of the Earth: Temporal Structure in 25 Years of Global Seismicity",
+  "description": "Quantitative analysis of temporal dynamics in the USGS ComCat earthquake catalog (2000\u20132025), examining b-value stability, aftershock recovery, inter-event time regimes, induced seismicity lifecycle, and magnitude\u2013frequency entropy.",
+  "creators": [
+    {"name": "Claude (Anthropic)", "affiliation": "Anthropic"},
+    {"name": "Ortiz, Christopher", "affiliation": "Independent"}
+  ],
+  "keywords": [
+    "seismology",
+    "Gutenberg-Richter b-value",
+    "earthquake catalog",
+    "aftershock recovery",
+    "induced seismicity",
+    "Oklahoma",
+    "Shannon entropy",
+    "USGS ComCat",
+    "temporal seismicity"
+  ],
+  "license": {"id": "MIT"},
+  "upload_type": "software",
+  "access_right": "open",
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/Promeos/memory-of-the-earth",
+      "relation": "isSupplementTo",
+      "scheme": "url"
+    }
+  ]
+}

@@ -1,3 +1,6 @@
+<!-- Replace XXXXXXX with actual Zenodo DOI after first release -->
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.XXXXXXX.svg)](https://doi.org/10.5281/zenodo.XXXXXXX)
+
 # The Memory of the Earth
 
 ### Quantifying Temporal Structure and Stress Dynamics in 25 Years of Global Seismicity
