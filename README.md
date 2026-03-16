@@ -29,6 +29,16 @@ Each analysis stands on its own. Together, they produce a composite picture of h
 
 ---
 
+## Quick Results
+
+- **b-value volatility is real and spatially structured**: 709 grid cells mapped globally; median b = 1.09, but temporal volatility (CV_b) varies 100-fold across tectonic settings, with rift zones the most volatile and transform faults the most stable.
+- **Stress recovery after M7+ earthquakes is rarely exponential**: Of 139 analyzed aftershock sequences, only 12% fit an exponential recovery model — most show complex, non-exponential return patterns. Spreading ridges recover slowest (Omori p = 0.42 vs. ~1.8 globally).
+- **91% of seismically active regions are temporally clustered**: Inter-event time analysis across 715 cells finds near-universal aftershock-driven clustering. True Poisson (memoryless) behavior is the exception at 1.7%; quasi-periodic behavior is absent at this scale.
+- **Oklahoma has not returned to baseline**: Despite a 94% decline in injection volumes since 2010, seismicity rates remain ~140× above pre-injection levels, and the b-value has dropped below the onset-phase value — the crust has not fully healed.
+- **Global entropy carries no earthquake prediction signal**: Superposed epoch analysis of 384 M7+ events confirms that magnitude-distribution entropy does not systematically precede large earthquakes — a null result consistent with the base-rate difficulty of earthquake prediction.
+
+---
+
 ## Selected Figures
 
 ### Global b-value Atlas (Notebook 1)
@@ -119,7 +129,7 @@ For the Oklahoma analysis (Notebook 4), pull a separate regional catalog at M1.0
 ### Expected Data Volume
 
 - Global M2.5+, 2000–2025: ~600,000–800,000 events (**actual: 681,450** after cleaning and deduplication)
-- Oklahoma M1.0+, 2000–2025: ~100,000–150,000 events (**actual: 31,187** — lower than projected, reflecting the regional catalog's stricter event-type filtering and deduplication)
+- Oklahoma M1.0+, 2000–2025: ~25,000–40,000 events (**actual: 31,187** — the initial projection of 100K–150K overestimated the count; the Oklahoma regional box at M1.0+ produces far fewer events than a statewide M0.1+ query, and event-type filtering plus deduplication further reduce the total)
 
 ### Supplementary External Datasets
 
@@ -453,8 +463,10 @@ scipy>=1.11
 matplotlib>=3.7
 seaborn>=0.12
 scikit-learn>=1.3
+ruptures>=1.1
 requests>=2.31
 jupyter>=1.0
+pytest>=7.0
 ```
 
 ---
@@ -512,6 +524,14 @@ Build in this order. Each notebook should be self-contained and produce its own 
 The following findings emerged from running the full analysis pipeline on 681,450 global M2.5+ events and 31,187 Oklahoma M1.0+ events (2000–2025).
 
 ### 1. The b-value Stability Atlas (Notebook 1)
+
+<img src="figures/01_global_bvalue_map.png" width="800" alt="Global map of Gutenberg-Richter b-values on a 2-degree grid, showing higher b-values at spreading ridges and lower b-values in stable continental interiors">
+
+*Global b-value map: each cell's color encodes the ratio of small to large earthquakes over 25 years — red (high b) means stress released in many small events, blue (low b) means proportionally more large ones.*
+
+<img src="figures/01_global_cv_b_map.png" width="800" alt="Global map of b-value temporal volatility (coefficient of variation), highlighting volatile regions in red and stable regions in green">
+
+*Temporal volatility of b-value (CV_b): green regions maintain stable earthquake statistics over rolling 3-year windows, while red regions show large swings — a proxy for how much the seismic "rules" are changing.*
 
 The global 2°×2° b-value grid produced **709 cells** with valid estimates (≥50 events above local Mc).
 
@@ -588,6 +608,10 @@ The Kruskal-Wallis test on Omori p is not significant (H = 6.3, p = 0.178), like
 
 ### 3. Inter-Event Time Regime Classification (Notebook 3)
 
+<img src="figures/03_regime_classification_map.png" width="800" alt="Global map classifying each seismically active 2-degree cell by temporal regime: clustered (red), Poisson-like (blue), or ambiguous (gray)">
+
+*Temporal regime of each seismically active region — red means earthquakes arrive in bursts (91% of cells), blue means random timing like raindrops (1.7%), gray is ambiguous. True randomness is the exception, not the rule.*
+
 **715 cells** met the classification criteria (≥100 events, median IET < 30 days). Distribution fitting with AIC model selection yielded:
 
 | Regime | Count | Fraction |
@@ -624,6 +648,10 @@ Spreading ridges show the most intense temporal clustering (lowest k = 0.367), l
 
 ### 4. The Oklahoma Experiment (Notebook 4)
 
+<img src="figures/04_oklahoma_timeline.png" width="800" alt="Oklahoma seismicity timeline showing monthly earthquake counts as bars and rolling b-value as a line, with injection activity phases marked">
+
+*Oklahoma's 15-year arc from seismic quiescence through explosion through partial recovery — pink bars are monthly earthquake counts, the blue line tracks the small-to-big earthquake ratio, and vertical dashed lines mark regulatory phase boundaries.*
+
 The Oklahoma M1.0+ catalog (31,187 events) was divided into five phases:
 
 | Phase | Events | Monthly Mean | b-value (95% CI) | Weibull k |
@@ -646,6 +674,10 @@ Key findings:
 - **Lag correlation analysis**: Peak Pearson r = 0.032 at 11-month lag; zero-lag r = -0.008 (p = 0.92). The weak instantaneous correlation is consistent with the known pore-pressure diffusion delay between injection and induced seismicity (Langenbruch & Zoback 2016). The injection volume peak (2010) precedes the seismicity peak (2014–2015) by 4–5 years, reflecting the timescale for pressure propagation through the Arbuckle formation to critically stressed basement faults.
 
 ### 5. The Seismic Entropy Index (Notebook 5)
+
+<img src="figures/05_superposed_epoch.png" width="800" alt="Superposed epoch analysis aligning 384 M7+ earthquakes at time zero, showing mean entropy curve within null model confidence bands">
+
+*Superposed epoch analysis: all 384 M7+ earthquakes aligned at day zero. The observed entropy curve (teal) stays within the null model's 95% confidence band (gray) — no systematic entropy precursor to large earthquakes.*
 
 Shannon entropy of the global magnitude distribution was computed in 90-day rolling windows (7-day stride, ≥100 events per window).
 
@@ -687,15 +719,31 @@ pip install -r requirements.txt
 # 2. Fetch the USGS earthquake catalog (~20-40 min depending on API speed)
 python 00_data_acquisition.py
 
-# 3. Download supplementary datasets (see below)
+# 3. Download supplementary datasets
+bash scripts/download_external_data.sh
 
-# 4. Run notebooks in order
+# 4. Run tests
+pytest tests/
+
+# 5. Run notebooks in order
 jupyter notebook 01_bvalue_stability_atlas.ipynb
 ```
 
 ### Downloading Supplementary Datasets
 
-The `data/external/` directory is not included in the repository due to size (~294 MB). The notebooks will still run using the USGS catalog alone, but several analyses (faulting style, strain rate, heat flow, tectonic setting, injection volumes, SCEDC regional catalog) require these external datasets. Download them into `data/external/`:
+The easiest way to download all external datasets is to run:
+
+```bash
+bash scripts/download_external_data.sh
+```
+
+This script is idempotent (skips existing files), handles pagination for large queries, and provides progress output. OCC injection well data requires manual download (the script prints instructions).
+
+The `data/external/` directory is not included in the repository due to size (~294 MB). The notebooks will still run using the USGS catalog alone, but several analyses (faulting style, strain rate, heat flow, tectonic setting, injection volumes, SCEDC regional catalog) require these external datasets.
+
+<details>
+<summary>Manual download commands (reference)</summary>
+
 
 #### Global CMT Catalog (NDK format) — used in NB01
 ```bash
@@ -762,10 +810,17 @@ done
 ```
 
 #### USGS Oklahoma Full Catalog — used in NB04
+
+**Note:** The USGS API limits responses to 20,000 events per query. For M0.1+ in the Oklahoma bounding box, use `scripts/download_external_data.sh` which paginates by month to capture the full catalog. A single query with `limit=20000` will silently truncate.
+
 ```bash
-curl -o data/external/ogs_usgs_oklahoma_full.csv \
-  "https://earthquake.usgs.gov/fdsnws/event/1/query?format=csv&starttime=2000-01-01&endtime=2025-01-01&minlatitude=33.5&maxlatitude=37.5&minlongitude=-100.0&maxlongitude=-94.5&minmagnitude=0.1&orderby=time-asc&limit=20000"
+# Use the download script (recommended — handles pagination):
+bash scripts/download_external_data.sh
+
+# Or manually paginate by month (see scripts/download_external_data.sh for the full loop)
 ```
+
+</details>
 
 ---
 

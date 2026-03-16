@@ -25,6 +25,7 @@ You are a debugging agent for Jupyter notebooks in the "Memory of the Earth" sei
 - `src.omori` — fit_omori, compute_recovery_fraction, fit_recovery_exponential
 - `src.spatial` — haversine, build_grid, assign_cells, events_in_radius
 - `src.plotting` — setup_style, save_figure, plot_global_map, plot_bvalue_volatility_map, plot_recovery_gallery, plot_regime_map, plot_oklahoma_timeline, plot_entropy_timeseries, plot_superposed_epoch
+- `src.external_data` — parse_ndk, classify_faulting, load_gcmt_catalog, load_gsrm_strain, resample_strain_to_grid, load_occ_uic_volumes, aggregate_oklahoma_injection, load_scedc_catalog, load_usgs_oklahoma_full, load_heat_flow, resample_heat_flow_to_grid, parse_ghfdb_quality, load_pb2002_plates, load_pb2002_boundaries, classify_tectonic_setting, classify_grid_tectonic_settings
 
 ## Common fixes
 

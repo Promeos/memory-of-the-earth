@@ -15,6 +15,8 @@ data/earthquake_catalog_oklahoma.csv
 """
 
 import sys
+if sys.version_info < (3, 10):
+    sys.exit("Python 3.10+ required")
 from pathlib import Path
 
 import numpy as np
