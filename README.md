@@ -1,5 +1,4 @@
-<!-- Replace XXXXXXX with actual Zenodo DOI after first release -->
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.XXXXXXX.svg)](https://doi.org/10.5281/zenodo.XXXXXXX)
+[![DOI](https://zenodo.org/badge/1181872109.svg)](https://doi.org/10.5281/zenodo.19043084)
 
 # The Memory of the Earth
 
