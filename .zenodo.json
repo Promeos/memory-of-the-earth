@@ -2,9 +2,9 @@
   "title": "Memory of the Earth: Temporal Structure in 25 Years of Global Seismicity",
   "description": "Quantitative analysis of temporal dynamics in the USGS ComCat earthquake catalog (2000\u20132025), examining b-value stability, aftershock recovery, inter-event time regimes, induced seismicity lifecycle, and magnitude\u2013frequency entropy.",
   "creators": [
-    {"name": "Claude (Anthropic)", "affiliation": "Anthropic"},
-    {"name": "Ortiz, Christopher", "affiliation": "Independent"}
+    {"name": "Ortiz, Christopher"}
   ],
+  "notes": "Conceptual design and implementation by Claude (Opus 4.6, Anthropic). Domain guidance and review by Christopher Ortiz.",
   "keywords": [
     "seismology",
     "Gutenberg-Richter b-value",

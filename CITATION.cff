@@ -1,12 +1,11 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 authors:
-  - name: "Claude (Anthropic)"
-    affiliation: "Anthropic"
   - family-names: Ortiz
     given-names: Christopher
     orcid: https://orcid.org/0009-0009-5045-5883
 title: "Memory of the Earth: Temporal Structure in 25 Years of Global Seismicity"
+abstract: "Conceptual design and implementation by Claude (Opus 4.6, Anthropic). Domain guidance and review by Christopher Ortiz."
 version: v1.0.0
 doi: 10.5281/zenodo.19043084
 date-released: 2026-03-16
