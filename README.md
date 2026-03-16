@@ -78,7 +78,7 @@ The Gutenberg-Richter law and Omori aftershock decay are among the most robust e
 
 **Inter-event time regime classification has been done regionally but we are not aware of a uniform global classification.** Distribution fitting has been applied to California (Corral 2004), Japan (Hasumi et al. 2009), and Italy (Touati et al. 2009), among others. We test whether a consistent model-comparison framework (AIC across four candidate distributions) applied uniformly to every seismically active 2° × 2° cell on the globe reveals interpretable spatial patterns.
 
-We note that each of these claims about novelty reflects our understanding of the literature as of mid-2025 and may not capture all prior work. The value of the project does not depend on strict priority — even if individual analyses have precedents, the integration of all five into a single framework applied to a common catalog is, to our knowledge, new.
+We note that each of these claims about novelty reflects our understanding of the literature as of early 2026 and may not capture all prior work. In particular, Rundle et al. (2019) applied Shannon entropy to global seismic catalogs before this project began — our Notebook 5 replicates and extends their null finding with a longer catalog and additional regional analysis. The interpretation of temporal b-value variations has been actively debated (Marzocchi et al. 2020; Piegari et al. 2025), and our CV_b results should be read with those critiques in mind. The value of the project does not depend on strict priority — even if individual analyses have precedents, the integration of all five into a single framework applied to a common catalog is, to our knowledge, new.
 
 ---
 
@@ -200,7 +200,7 @@ For each spatial cell with ≥ 200 events:
 
 This is the **b-value volatility index** — a proxy for temporal instability in catalog-derived b-value estimates.
 
-**Interpretation caveat:** High CV_b may reflect genuine stress-regime instability, but it can also arise from changing completeness thresholds, sample-size fluctuations in low-seismicity cells, magnitude-type mixing, network upgrades, or sensitivity to windowing choices. We treat physical interpretation (e.g., "this region has an unstable stress regime") as a hypothesis to be tested against these confounds, not as a direct reading of CV_b.
+**Interpretation caveat:** High CV_b may reflect genuine stress-regime instability, but it can also arise from changing completeness thresholds, sample-size fluctuations in low-seismicity cells, magnitude-type mixing, network upgrades, or sensitivity to windowing choices. Furthermore, Piegari et al. (2025) demonstrated that apparent temporal b-value changes can emerge from structural heterogeneity — different faults activating at different times within a single spatial cell — rather than genuine stress evolution on any one structure. Marzocchi et al. (2020) showed more broadly that searches for significant b-value variations are prone to false positives when catalog artifacts are not rigorously controlled. We treat physical interpretation (e.g., "this region has an unstable stress regime") as a hypothesis to be tested against these confounds, not as a direct reading of CV_b.
 
 **Hypothesis (to be tested):** After controlling for sample-size effects and Mc stability, CV_b is higher at complex plate boundaries (triple junctions, regions with mixed faulting styles) and lower in simple subduction zones and stable continental interiors.
 
@@ -368,7 +368,7 @@ Key questions (all framed as hypotheses to test):
 
 **Purpose:** Construct a continuous time series of the Shannon entropy of earthquake magnitude distributions, and test whether it carries any information about the approach of large events.
 
-**Important caveat up front:** Earthquake prediction remains an unsolved problem in geophysics. This analysis is exploratory. We expect, based on prior work and the base-rate difficulty of the problem, that any signal will be weak at best — and the null result (no predictive information) is a valid and publishable finding.
+**Important caveat up front:** Earthquake prediction remains an unsolved problem in geophysics. This analysis is exploratory. Rundle et al. (2019) applied Shannon information entropy to global earthquake catalogs and found that entropy-based scores did not improve on simpler approaches — establishing a null-result baseline for this class of methods. We expect, based on their work and the base-rate difficulty of the problem, that any signal will be weak at best — and replicating the null result with a longer catalog and additional regional analysis is itself a valid finding.
 
 #### 5.1 Entropy Computation
 
@@ -511,8 +511,12 @@ Build in this order. Each notebook should be self-contained and produce its own 
 - Gutenberg, B. & Richter, C.F. (1944). Frequency of earthquakes in California. *BSSA*, 34(4), 185–188.
 - Hasumi, T. et al. (2009). The Weibull–log Weibull distribution for interoccurrence times of earthquakes. *Physica A*, 388(4), 491–498.
 - Langenbruch, C. & Zoback, M.D. (2016). How will induced seismicity in Oklahoma respond to decreased saltwater injection rates? *Science Advances*, 2(11), e1601542.
+- Marzocchi, W., Spassiani, I., Stallone, A. & Taroni, M. (2020). How to be fooled searching for significant variations of the b-value. *Geophysical Journal International*, 220(3), 1845–1856. https://doi.org/10.1093/gji/ggz541
+- Piegari, E., Corrado, G., Herrmann, M. & Marzocchi, W. (2025). Structural heterogeneities and spatial variations of seismicity drive temporal b-value changes. *Geophysical Research Letters*, 52. https://doi.org/10.1029/2025GL116118
+- Rundle, J.B., Giguere, A., Turcotte, D.L., Crutchfield, J.P. & Donnellan, A. (2019). Global seismic nowcasting with Shannon information entropy. *Earth and Space Science*, 6(1), 191–197. https://doi.org/10.1029/2018EA000464
 - Schorlemmer, D., Wiemer, S. & Wyss, M. (2005). Variations in earthquake-size distribution across different stress regimes. *Nature*, 437(7058), 539–542.
 - Shi, Y. & Bolt, B.A. (1982). The standard error of the magnitude-frequency b value. *BSSA*, 72(5), 1677–1687.
+- Skoumal, R.J., Barbour, A.J., Rubinstein, J.L. & Glasgow, M.A. (2024). Reduced injection rates and shallower depths mitigated induced seismicity in Oklahoma. *The Seismic Record*, 4(4), 279–289. https://doi.org/10.1785/0320240003
 - Tormann, T. et al. (2015). Randomness of megathrust earthquakes implied by rapid stress recovery after the Japan earthquake. *Nature Geoscience*, 8, 152–158.
 - Wells, D.L. & Coppersmith, K.J. (1994). New empirical relationships among magnitude, rupture length, rupture width, rupture area, and surface displacement. *BSSA*, 84(4), 974–1002.
 - Wiemer, S. & Wyss, M. (2000). Minimum magnitude of completeness in earthquake catalogs. *BSSA*, 90(4), 859–869.
@@ -666,7 +670,7 @@ Key findings:
 - **b-value elevation during Surge and Regulation** (b ≈ 1.16–1.20) followed by a return to b ≈ 0.93 in Recovery — below the Onset value, suggesting a systematic shift in the magnitude distribution.
 - **Weibull k consistently below 1.0** across all phases with sufficient data, confirming persistent temporal clustering. The lowest k (0.43) during the Surge reflects intense aftershock-dominated activity; the gradual increase toward k ≈ 0.69 in Recovery indicates partial but incomplete return toward Poisson-like timing.
 - **Spatial centroid migration**: Activity shifted northward during the Surge (centroid ~36.5°N) and partially returned southward in Recovery (~35.7°N).
-- The Recovery phase has **not** returned to Baseline: monthly rates remain ~140× higher, and the Weibull k and spatial footprint differ substantially from the pre-injection state.
+- The Recovery phase has **not** returned to Baseline: monthly rates remain ~140× higher, and the Weibull k and spatial footprint differ substantially from the pre-injection state. Skoumal et al. (2024) confirmed that reduced injection rates and well plugbacks mitigated Oklahoma seismicity, but our multi-metric tracking shows that statistical recovery to pre-injection conditions remains incomplete.
 
 **New — Injection Volume Overlay (OCC UIC Data):** Integration of **1,935,853 well-month injection records** from the Oklahoma Corporation Commission (2006–2024) provides the first direct overlay of injection activity with seismicity metrics in this analysis:
 - **Peak injection**: 1,800M bbl/month (June 2010), with **8,253 active wells** at peak
@@ -700,7 +704,7 @@ Shannon entropy of the global magnitude distribution was computed in 90-day roll
 
 Spreading ridges show the lowest entropy (narrowest magnitude range), while intraplate regions have the highest (most diverse magnitude distributions). This mirrors the b-value pattern from NB01 — both metrics capture the same underlying physics: extensional settings concentrate energy in smaller events (low entropy, high b), while intraplate regions with higher stored stress produce a wider range of magnitudes.
 
-The entropy analysis confirms the prediction stated in the experimental design: **global magnitude entropy does not carry operationally useful predictive information about large earthquakes.** This null result is itself informative — it demonstrates that the statistical structure of the magnitude distribution, while varying meaningfully over time, does not systematically anticipate the occurrence of large events.
+The entropy analysis confirms the prediction stated in the experimental design: **global magnitude entropy does not carry operationally useful predictive information about large earthquakes.** This replicates the finding of Rundle et al. (2019), who applied Shannon information entropy to global seismic catalogs and reached the same conclusion. The null result is itself informative — it demonstrates that the statistical structure of the magnitude distribution, while varying meaningfully over time, does not systematically anticipate the occurrence of large events.
 
 ---
 
