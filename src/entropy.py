@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 
-def shannon_entropy(magnitudes, mc, bin_width=0.5, max_mag=7.5):
+def shannon_entropy(magnitudes, mc, bin_width=0.5, max_mag=10.0):
     """Compute Shannon entropy of a magnitude distribution.
 
     H = -Σ p_i · log₂(p_i)
@@ -89,32 +89,56 @@ def rolling_entropy(times, magnitudes, mc, window_days=90, stride_days=7,
     times = times[order]
     magnitudes = magnitudes[order]
 
+    # Convert to int64 nanoseconds for fast searchsorted
+    times_ns = times.astype(np.int64)
+
     t_min = times.min()
     t_max = times.max()
-    window_td = pd.Timedelta(days=window_days)
-    stride_td = pd.Timedelta(days=stride_days)
+    window_ns = int(pd.Timedelta(days=window_days).value)
+    stride_ns = int(pd.Timedelta(days=stride_days).value)
+    half_window_ns = window_ns // 2
+
+    # Pre-compute magnitude bins for entropy calculation
+    bins = np.arange(mc, 10.0 + bin_width, bin_width)
+
+    t_start_ns = int(t_min.value) if hasattr(t_min, 'value') else int(
+        pd.Timestamp(t_min).value)
+    t_max_ns = int(t_max.value) if hasattr(t_max, 'value') else int(
+        pd.Timestamp(t_max).value)
 
     results = []
-    t_start = t_min
-    while t_start + window_td <= t_max:
-        t_end = t_start + window_td
-        mask = (times >= t_start) & (times < t_end)
-        mags_window = magnitudes[mask]
+    t_ns = t_start_ns
+    while t_ns + window_ns <= t_max_ns:
+        t_end_ns = t_ns + window_ns
+
+        # Use searchsorted for O(log n) window lookup
+        i_start = np.searchsorted(times_ns, t_ns, side='left')
+        i_end = np.searchsorted(times_ns, t_end_ns, side='left')
+
+        mags_window = magnitudes[i_start:i_end]
         mags_above_mc = mags_window[mags_window >= mc]
         n = len(mags_above_mc)
 
         if n >= min_events:
-            H = shannon_entropy(mags_above_mc, mc, bin_width=bin_width)
+            # Inline entropy calculation to avoid function call overhead
+            counts, _ = np.histogram(mags_above_mc, bins=bins)
+            total = counts.sum()
+            if total == 0:
+                H = np.nan
+            else:
+                probs = counts / total
+                probs = probs[probs > 0]
+                H = float(-np.sum(probs * np.log2(probs)))
         else:
             H = np.nan
 
         results.append({
-            "center_time": t_start + window_td / 2,
+            "center_time": pd.Timestamp(t_ns + half_window_ns),
             "H": H,
             "n_events": n,
         })
 
-        t_start += stride_td
+        t_ns += stride_ns
 
     return pd.DataFrame(results)
 
@@ -143,7 +167,7 @@ def detect_anomalies(entropy_df, percentile=5):
 
 def null_model_test(times, magnitudes, mc, large_event_times,
                     window_days=90, stride_days=7, min_events=100,
-                    association_days=180, percentile=5, n_shuffles=1000,
+                    association_days=60, percentile=5, n_shuffles=200,
                     seed=42):
     """Test whether entropy anomalies are associated with large earthquakes.
 
@@ -179,6 +203,10 @@ def null_model_test(times, magnitudes, mc, large_event_times,
         ``p_value`` (fraction of null rates >= observed).
     """
     large_event_times = pd.to_datetime(large_event_times)
+    # Pre-convert to int64 nanoseconds for fast comparison
+    large_ns = large_event_times.astype(np.int64)
+    large_ns_sorted = np.sort(large_ns)
+    assoc_ns = int(pd.Timedelta(days=association_days).value)
 
     def _hit_rate(mags):
         ent = rolling_entropy(times, mags, mc, window_days, stride_days,
@@ -187,12 +215,14 @@ def null_model_test(times, magnitudes, mc, large_event_times,
         if len(anomalies) == 0:
             return 0.0
 
+        # Vectorized hit calculation using searchsorted
+        anom_times_ns = pd.to_datetime(
+            anomalies["center_time"]).astype(np.int64).values
         hits = 0
-        for _, row in anomalies.iterrows():
-            t_anom = row["center_time"]
-            t_end = t_anom + pd.Timedelta(days=association_days)
-            if ((large_event_times >= t_anom)
-                    & (large_event_times <= t_end)).any():
+        for t_ns in anom_times_ns:
+            # Check if any large event falls in [t_ns, t_ns + assoc_ns]
+            idx = np.searchsorted(large_ns_sorted, t_ns, side='left')
+            if idx < len(large_ns_sorted) and large_ns_sorted[idx] <= t_ns + assoc_ns:
                 hits += 1
 
         return hits / len(anomalies)

@@ -74,7 +74,7 @@ def fit_omori(event_times, mainshock_time, window_days=30, stride_days=10):
         return None
 
     try:
-        popt, _ = curve_fit(
+        popt, pcov = curve_fit(
             _omori_rate,
             t_centers[mask],
             rates[mask],
@@ -97,6 +97,9 @@ def fit_omori(event_times, mainshock_time, window_days=30, stride_days=10):
         "K": K,
         "c": c,
         "p": p,
+        "K_std": np.sqrt(pcov[0, 0]) if pcov is not None else np.nan,
+        "c_std": np.sqrt(pcov[1, 1]) if pcov is not None else np.nan,
+        "p_std": np.sqrt(pcov[2, 2]) if pcov is not None else np.nan,
         "t_centers": t_centers,
         "rates": rates,
         "r_squared": r_squared,

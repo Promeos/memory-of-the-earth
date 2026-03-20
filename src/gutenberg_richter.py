@@ -47,7 +47,13 @@ def estimate_b_value(magnitudes, mc, delta_m=0.1):
         )
 
     m_mean = mags.mean()
-    b = np.log10(np.e) / (m_mean - mc + delta_m / 2.0)
+    denom = m_mean - mc + delta_m / 2.0
+    if denom <= 0:
+        raise ValueError(
+            f"Mean magnitude {m_mean:.3f} too close to mc={mc} "
+            f"(denom={denom:.6f}). Cannot estimate b-value."
+        )
+    b = np.log10(np.e) / denom
 
     # Shi & Bolt (1982) standard error
     variance_sum = np.sum((mags - m_mean) ** 2)

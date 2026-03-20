@@ -18,9 +18,9 @@ class TestEstimateMc:
         mc = estimate_mc(mags)
         assert 1.5 <= mc <= 3.0
 
-    def test_empty_returns_zero(self):
-        """Empty magnitude array returns 0.0."""
-        assert estimate_mc(np.array([])) == 0.0
+    def test_empty_returns_nan(self):
+        """Empty magnitude array returns NaN."""
+        assert np.isnan(estimate_mc(np.array([])))
 
     def test_unsupported_method_raises(self):
         with pytest.raises(ValueError, match="Unsupported method"):

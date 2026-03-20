@@ -5,13 +5,9 @@ for global maps, recovery curves, regime classification maps, Oklahoma
 timelines, and entropy time series.
 """
 
-import warnings
 from pathlib import Path
 
-import matplotlib
 import matplotlib.pyplot as plt
-import matplotlib.cm as cm
-import matplotlib.colors as mcolors
 import numpy as np
 
 

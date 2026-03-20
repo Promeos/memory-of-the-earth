@@ -21,6 +21,7 @@ build/
 
 # Jupyter
 .ipynb_checkpoints/
+*_executed.ipynb
 
 # Environment
 .env
@@ -34,3 +35,6 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Correspondence
+correspondence/

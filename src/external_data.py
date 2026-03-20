@@ -6,7 +6,6 @@ OCC injection well volumes, SCEDC regional catalog,
 IHFC Global Heat Flow Database.
 """
 
-import os
 import re
 import numpy as np
 import pandas as pd

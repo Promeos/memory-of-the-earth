@@ -183,7 +183,7 @@ def estimate_mc(magnitudes, method="maxc"):
     magnitudes = magnitudes[~np.isnan(magnitudes)]
 
     if len(magnitudes) == 0:
-        return 0.0
+        return np.nan
 
     # Build frequency-magnitude distribution with 0.1-unit bins.
     bin_min = np.floor(magnitudes.min() * 10) / 10

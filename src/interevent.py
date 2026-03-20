@@ -28,6 +28,7 @@ def compute_interevent_times(times):
         Inter-event times in seconds (length = len(times) - 1).
     """
     times = pd.to_datetime(times)
+    times = times.sort_values() if hasattr(times, 'sort_values') else np.sort(times)
     deltas = np.diff(times)
     return deltas.astype("timedelta64[ns]").astype(np.float64) / 1e9
 
@@ -72,9 +73,9 @@ def fit_distributions(iet):
     results = {}
 
     for name, dist in distributions.items():
-        params = dist.fit(iet)
+        params = dist.fit(iet, floc=0)
         loglik = np.sum(dist.logpdf(iet, *params))
-        k = len(params)
+        k = len(params) - 1  # exclude fixed loc parameter
         aic = 2 * k - 2 * loglik
         bic = k * np.log(n) - 2 * loglik
         results[name] = {
